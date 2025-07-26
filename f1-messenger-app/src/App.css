@@ -1,0 +1,146 @@
+/* F1-themed color scheme */
+:root {
+  --f1-red: #e10600;
+  --f1-dark-red: #b50400;
+  --f1-white: #ffffff;
+  --f1-black: #15151e;
+  --f1-dark-gray: #1e1e28;
+  --f1-gray: #2a2a35;
+  --f1-light-gray: #38383f;
+  --f1-silver: #c7c7c7;
+  --f1-blue: #0066cc;
+  --f1-green: #00d762;
+  --f1-orange: #ff8700;
+  
+  /* Chat colors */
+  --user-bg: var(--f1-blue);
+  --assistant-bg: var(--f1-gray);
+  --error-bg: var(--f1-red);
+  --border-color: var(--f1-light-gray);
+  --text-primary: var(--f1-white);
+  --text-secondary: var(--f1-silver);
+  --text-muted: #9ca3af;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  background: linear-gradient(135deg, var(--f1-black) 0%, var(--f1-dark-gray) 100%);
+  color: var(--text-primary);
+  height: 100vh;
+  overflow: hidden;
+}
+
+.app-container {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  background: var(--f1-black);
+}
+
+.app-header {
+  background: linear-gradient(90deg, var(--f1-red) 0%, var(--f1-dark-red) 100%);
+  padding: 1rem 1.5rem;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  border-bottom: 2px solid var(--f1-dark-red);
+}
+
+.header-content {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.app-header h1 {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--f1-white);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+  letter-spacing: 0.5px;
+}
+
+.chat-container {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  max-width: 1200px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--f1-dark-gray);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--f1-light-gray);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--f1-silver);
+}
+
+/* Animations */
+@keyframes slideInUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+}
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.spinning {
+  animation: spin 1s linear infinite;
+  }
+
+/* Responsive design */
+@media (max-width: 768px) {
+  .app-header {
+    padding: 0.75rem 1rem;
+}
+
+  .app-header h1 {
+    font-size: 1.25rem;
+  }
+  
+  .header-content {
+    flex-direction: column;
+    gap: 0.5rem;
+    align-items: flex-start;
+  }
+}

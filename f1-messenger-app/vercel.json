@@ -1,0 +1,23 @@
+{
+  "version": 2,
+  "builds": [
+    {
+      "src": "server/f1AgentServer.ts",
+      "use": "@vercel/node"
+    }
+  ],
+  "routes": [
+    {
+      "src": "/api/chat",
+      "dest": "/server/f1AgentServer.ts"
+    },
+    {
+      "src": "/health",
+      "dest": "/server/f1AgentServer.ts"
+    }
+  ],
+  "env": {
+    "VITE_GEMINI_API_KEY": "@vite_gemini_api_key",
+    "F1_AGENT_PORT": "3000"
+  }
+} 
