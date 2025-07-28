@@ -133,7 +133,7 @@ app.post('/api/chat', async (req, res) => {
  */
 async function callF1Tools(queryPlan: any): Promise<any> {
   try {
-    console.log('Calling F1 tool:', queryPlan.tool, 'with args:', queryPlan.arguments);
+    console.log('Calling F1 tool directly:', queryPlan.tool);
     
     const response = await fetch('http://localhost:3001/mcp/tool', {
       method: 'POST',
@@ -152,6 +152,9 @@ async function callF1Tools(queryPlan: any): Promise<any> {
 
     const result = await response.json();
     console.log('F1 tool response received');
+    console.log('Tool result status:', result.status);
+    console.log('Tool result data type:', typeof result.data);
+    console.log('Tool result data length:', Array.isArray(result.data) ? result.data.length : 'N/A');
     
     return result;
 

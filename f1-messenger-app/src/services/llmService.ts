@@ -230,10 +230,14 @@ RESPONSE:`;
     }
 
     try {
+      console.log('🔍 Synthesizing response for:', userInput);
+      console.log('📊 Tool result structure:', Object.keys(toolResult));
+      
       const prompt = this.buildSynthesisPrompt(userInput, toolResult, toolName);
       const result = await this.model.generateContent(prompt);
       const response = result.response.text();
       
+      console.log('✅ Synthesis completed');
       return response.trim();
       
     } catch (error) {
@@ -243,27 +247,193 @@ RESPONSE:`;
   }
 
   /**
+   * Extract structured F1 data from tool results
+   */
+  private extractF1Data(toolResult: any, toolName: string): any {
+    if (toolName === 'get_session_results') {
+      return this.extractRaceResults(toolResult);
+    } else if (toolName === 'get_championship_standings') {
+      return this.extractChampionshipStandings(toolResult);
+    }
+    return toolResult;
+  }
+
+  /**
+   * Extract race results in a structured format
+   */
+  private extractRaceResults(toolResult: any): any {
+    try {
+      console.log('🔍 Extracting race results from:', Object.keys(toolResult));
+      
+      // Handle nested data structure from bridge
+      let data = toolResult.data;
+      if (data && data.data) {
+        data = data.data; // Bridge returns {status: "success", data: {status: "success", data: [...]}}
+      }
+      
+      console.log('📊 Data type:', typeof data);
+      console.log('📊 Data is array:', Array.isArray(data));
+      console.log('📊 Data length:', Array.isArray(data) ? data.length : 'N/A');
+      
+      if (!Array.isArray(data) || data.length < 10) {
+        console.log('❌ Invalid data format');
+        return { error: 'Invalid race data format' };
+      }
+
+      // Extract key data arrays - based on actual data structure from logs
+      const driverNumbers = data[0] || {};
+      const driverNames = data[1] || {};
+      const driverCodes = data[2] || {};
+      const positions = data[13] || {}; // Position data
+      const finishStatus = data[18] || {}; // Finish status (Finished, Retired, etc.)
+      const points = data[19] || {}; // Points earned
+      const laps = data[20] || {}; // Laps completed
+      const times = data[17] || {}; // Race times
+
+      console.log('🏁 Positions found:', Object.keys(positions).length);
+      console.log('🏁 Position data:', positions);
+      console.log('🏁 Finish status:', finishStatus);
+      console.log('🏁 Points data:', points);
+
+      // Find the winner (position 1)
+      let winner = null;
+      let podium = [];
+
+      for (const [driverNum, position] of Object.entries(positions)) {
+        const pos = parseFloat(position as string);
+        console.log(`Driver ${driverNum}: position ${pos}`);
+        
+        // Skip invalid positions (NaN, retired drivers, etc.)
+        if (isNaN(pos) || pos <= 0) {
+          console.log(`Skipping driver ${driverNum} - invalid position: ${position}`);
+          continue;
+        }
+        
+        if (pos === 1) {
+          winner = {
+            number: driverNum,
+            name: driverNames[driverNum] || 'Unknown',
+            code: driverCodes[driverNum] || 'UNK',
+            position: pos,
+            points: parseFloat(points[driverNum] || '0') || 0,
+            status: finishStatus[driverNum] || 'Unknown',
+            laps: parseFloat(laps[driverNum] || '0') || 0,
+            time: times[driverNum] || 'Unknown'
+          };
+          console.log('🏆 Winner found:', winner);
+        } else if (pos <= 3) {
+          podium.push({
+            number: driverNum,
+            name: driverNames[driverNum] || 'Unknown',
+            code: driverCodes[driverNum] || 'UNK',
+            position: pos,
+            points: parseFloat(points[driverNum] || '0') || 0,
+            status: finishStatus[driverNum] || 'Unknown',
+            laps: parseFloat(laps[driverNum] || '0') || 0,
+            time: times[driverNum] || 'Unknown'
+          });
+        }
+      }
+
+      // Sort podium by position
+      podium.sort((a, b) => a.position - b.position);
+
+      // Validate we have a winner
+      if (!winner) {
+        console.log('❌ No winner found in race data');
+        return { error: 'No winner found in race data' };
+      }
+
+      const result = {
+        winner,
+        podium: [winner, ...podium].filter(Boolean),
+        totalDrivers: Object.keys(driverNumbers).length,
+        raceData: {
+          driverNumbers,
+          driverNames,
+          driverCodes,
+          positions,
+          finishStatus,
+          points,
+          laps,
+          times
+        }
+      };
+      
+      console.log('✅ Race results extracted successfully');
+      return result;
+    } catch (error) {
+      console.error('❌ Error extracting race results:', error);
+      return { error: 'Failed to extract race data' };
+    }
+  }
+
+  /**
+   * Extract championship standings in a structured format
+   */
+  private extractChampionshipStandings(toolResult: any): any {
+    try {
+      const data = toolResult.data?.data || toolResult.data || toolResult;
+      
+      if (data.drivers && Array.isArray(data.drivers)) {
+        return {
+          drivers: data.drivers.slice(0, 10), // Top 10
+          constructors: data.constructors || [],
+          season: data.season || '2025'
+        };
+      }
+      
+      return { error: 'Invalid championship data format' };
+    } catch (error) {
+      console.error('Error extracting championship standings:', error);
+      return { error: 'Failed to extract championship data' };
+    }
+  }
+
+  /**
    * Build prompt for response synthesis
    */
   private buildSynthesisPrompt(userInput: string, toolResult: any, toolName: string): string {
-    return `You are an F1 data assistant. Create a concise, conversational response based on the data.
+    // Extract structured data first
+    const structuredData = this.extractF1Data(toolResult, toolName);
+    
+    // Check for extraction errors
+    if (structuredData.error) {
+      return `You are an F1 data assistant. The user asked a question but there was an error retrieving the data.
+
+USER QUERY: "${userInput}"
+ERROR: ${structuredData.error}
+
+INSTRUCTIONS:
+1. Apologize for the data retrieval error
+2. Explain that you cannot provide accurate information due to the error
+3. Suggest the user try again later or rephrase their question
+4. DO NOT make up or guess any information
+5. Be honest about the limitation
+
+RESPONSE:`;
+    }
+    
+    return `You are an F1 data assistant. Create a concise, conversational response based on the structured data.
 
 USER QUERY: "${userInput}"
 TOOL USED: ${toolName}
-DATA: ${JSON.stringify(toolResult, null, 2)}
+STRUCTURED DATA: ${JSON.stringify(structuredData, null, 2)}
 
 INSTRUCTIONS:
-1. Answer the user's question directly
+1. Answer the user's question directly using the structured data
 2. Use natural, conversational language
 3. Include key facts and numbers
 4. Keep response under 200 words
 5. Use F1 terminology appropriately
 6. Format times, points, and positions clearly
+7. If asking about race winners, clearly state who won and their position
+8. If the data shows an error or is incomplete, admit it and don't guess
 
 EXAMPLES:
-- "Max Verstappen dominated the 2023 championship with 575 points and 19 wins, securing his third consecutive title."
+- "Lando Norris won the 2025 British Grand Prix, finishing 1st with 25 points."
+- "Max Verstappen dominated the 2023 championship with 575 points and 19 wins."
 - "The 2023 season featured 22 Grand Prix events, starting in Bahrain and ending in Abu Dhabi."
-- "Lewis Hamilton finished 3rd in the championship with 234 points, his best result since 2021."
 
 RESPONSE:`;
   }
@@ -272,11 +442,35 @@ RESPONSE:`;
    * Fallback synthesis when LLM is not available
    */
   private fallbackSynthesize(toolResult: any, toolName: string): string {
-    const data = toolResult.data?.data || toolResult.data;
+    const structuredData = this.extractF1Data(toolResult, toolName);
     
-    if (toolName === 'get_championship_standings' && data.drivers) {
-      const top3 = data.drivers.slice(0, 3);
-      const constructors = data.constructors?.[0];
+    // Handle extraction errors
+    if (structuredData.error) {
+      return `I apologize, but I encountered an error while retrieving the F1 data for your question. The data source returned: "${structuredData.error}". I cannot provide accurate information at this time. Please try again later or rephrase your question.`;
+    }
+    
+    if (toolName === 'get_session_results' && structuredData.winner) {
+      const winner = structuredData.winner;
+      const podium = structuredData.podium;
+      
+      let response = `🏆 Race Results:\n`;
+      response += `Winner: ${winner.name} (${winner.code}) - Position ${winner.position} with ${winner.points} points\n`;
+      
+      if (podium.length > 1) {
+        response += `Podium:\n`;
+        podium.forEach((driver: any, index: number) => {
+          if (index === 0) return; // Skip winner as already mentioned
+          const ordinal = ['1st', '2nd', '3rd'][driver.position - 1];
+          response += `${ordinal}: ${driver.name} (${driver.code}) - ${driver.points} points\n`;
+        });
+      }
+      
+      return response;
+    }
+    
+    if (toolName === 'get_championship_standings' && structuredData.drivers) {
+      const top3 = structuredData.drivers.slice(0, 3);
+      const constructors = structuredData.constructors?.[0];
       
       let response = `📊 Championship Standings:\n`;
       top3.forEach((driver: any, index: number) => {
@@ -291,7 +485,7 @@ RESPONSE:`;
       return response;
     }
     
-    return `📊 Data retrieved successfully. ${JSON.stringify(data).substring(0, 100)}...`;
+    return `I apologize, but I'm unable to process the F1 data in the expected format. The data structure is not recognized. Please try again later.`;
   }
 
   /**
