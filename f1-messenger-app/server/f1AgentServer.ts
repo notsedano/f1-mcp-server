@@ -30,7 +30,6 @@ interface ChatRequest {
 
 interface ChatResponse {
   message: {
-    role: 'assistant';
     content: string;
   };
 }
@@ -110,7 +109,6 @@ app.post('/api/chat', async (req, res) => {
     // Return response in Firebase-compatible format
     const response: ChatResponse = {
       message: {
-        role: 'assistant',
         content: agentResponse
       }
     };
@@ -124,7 +122,6 @@ app.post('/api/chat', async (req, res) => {
     // Return error in Firebase-compatible format
     res.status(500).json({
       message: {
-        role: 'assistant',
         content: 'Sorry, I encountered an error processing your F1 query. Please try again.'
       }
     });
