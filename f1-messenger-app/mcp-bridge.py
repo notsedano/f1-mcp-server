@@ -165,7 +165,7 @@ class F1MCPBridge:
             
             return None
             
-                except Exception as e:
+        except Exception as e:
             print(f"Ergast fallback failed: {e}")
             return None
     
