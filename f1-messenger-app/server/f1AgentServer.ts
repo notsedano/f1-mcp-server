@@ -103,7 +103,7 @@ app.post('/api/chat', async (req, res) => {
     console.log('Query plan:', queryPlan);
     
     // Handle cases where no valid tool is selected (basic conversation, clarification)
-    if (!queryPlan.tool || queryPlan.tool === 'null' || queryPlan.tool === 'clarification') {
+    if (!queryPlan.tool || queryPlan.tool === 'null' || queryPlan.tool === 'clarification' || queryPlan.tool === 'conversational') {
       console.log('🎭 Handling basic conversation or clarification request');
       
       // Generate a conversational response using HellRacer personality
