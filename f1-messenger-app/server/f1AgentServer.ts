@@ -10,6 +10,8 @@ dotenv.config();
 
 // Import F1 agent services after dotenv is loaded
 import { llmService } from '../src/services/llmService';
+import { callF1ToolsRecursive } from '../src/utils/toolCaller';
+import { TemporalReasoning } from '../src/utils/temporalReasoning';
 
 // Re-initialize LLM service after dotenv is loaded
 setTimeout(() => {
@@ -89,12 +91,40 @@ app.post('/api/chat', async (req, res) => {
 
     console.log('F1 Agent processing:', latestUserMessage.content);
 
-    // Process with F1 agent using LLM service
-    const queryPlan = await llmService.parseQueryIntelligently(latestUserMessage.content);
+    // Use centralized temporal reasoning to determine query processing
+    let queryPlan;
+    if (TemporalReasoning.shouldUseIntelligentFallback(latestUserMessage.content)) {
+      console.log('🎯 Server: Using intelligent fallback for temporal query');
+      queryPlan = await llmService.intelligentFallbackParseQuery(latestUserMessage.content);
+    } else {
+      // Process with F1 agent using LLM service
+      queryPlan = await llmService.parseQueryIntelligently(latestUserMessage.content);
+    }
     console.log('Query plan:', queryPlan);
     
-    // Call F1 tools
-    const toolResult = await callF1Tools(queryPlan);
+    // Handle cases where no valid tool is selected (basic conversation, clarification)
+    if (!queryPlan.tool || queryPlan.tool === 'null' || queryPlan.tool === 'clarification') {
+      console.log('🎭 Handling basic conversation or clarification request');
+      
+      // Generate a conversational response using HellRacer personality
+      const conversationalResponse = await llmService.generateConversationalResponse(
+        latestUserMessage.content,
+        queryPlan
+      );
+      
+      const response: ChatResponse = {
+        message: {
+          content: conversationalResponse
+        }
+      };
+      
+      console.log('Sending conversational response to Firebase');
+      res.json(response);
+      return;
+    }
+    
+    // Call F1 tools (now recursive) - only for valid tool calls
+    const toolResult = await callF1ToolsRecursive(queryPlan);
     console.log('F1 tools result received');
     
     // Synthesize response using LLM
@@ -128,38 +158,7 @@ app.post('/api/chat', async (req, res) => {
   }
 });
 
-/**
- * Call F1 tools based on query plan
- */
-async function callF1Tools(queryPlan: any): Promise<any> {
-  try {
-    console.log('Calling F1 tool:', queryPlan.tool, 'with args:', queryPlan.arguments);
-    
-    const response = await fetch('http://localhost:3001/mcp/tool', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        name: queryPlan.tool,
-        arguments: queryPlan.arguments
-      })
-    });
-
-    if (!response.ok) {
-      throw new Error(`Bridge request failed: ${response.status} ${response.statusText}`);
-    }
-
-    const result = await response.json();
-    console.log('F1 tool response received');
-    
-    return result;
-
-  } catch (error) {
-    console.error('F1 tools call failed:', error);
-    throw error;
-  }
-}
+// Removed duplicate functions - now using shared utility from ../src/utils/toolCaller
 
 // Start server
 app.listen(PORT, () => {
