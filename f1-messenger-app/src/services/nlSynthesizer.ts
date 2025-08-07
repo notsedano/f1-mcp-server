@@ -94,7 +94,10 @@ A: Red Bull dominated the 2011 season with Sebastian Vettel securing the champio
     if (extracted.performance) {
       const perf = extracted.performance;
       if (perf.totalLaps) facts.push(`Completed ${perf.totalLaps} laps`);
-      if (perf.fastestLap) facts.push(`Fastest lap: ${perf.fastestLap}`);
+      if (perf.fastestLap) {
+        const formattedLapTime = this.formatLapTime(perf.fastestLap);
+        facts.push(`Fastest lap: ${formattedLapTime}`);
+      }
       if (perf.avgLapTime) facts.push(`Average lap time: ${perf.avgLapTime.toFixed(2)}s`);
     }
     
@@ -173,6 +176,29 @@ A: Red Bull dominated the 2011 season with Sebastian Vettel securing the champio
       return `${Math.abs(seconds).toFixed(3)} s slower`;
     }
     return `${seconds.toFixed(3)} s quicker`;
+  }
+
+  /**
+   * Helper: Format lap time from timedelta string
+   */
+  private formatLapTime(lapTime: string): string {
+    // Handle pandas timedelta format like "0 days 00:00:45.754000"
+    if (lapTime.includes('days')) {
+      const match = lapTime.match(/(\d+) days (\d+):(\d+):(\d+\.\d+)/);
+      if (match) {
+        const [, days, hours, minutes, secondsAndMs] = match;
+        const [seconds, milliseconds] = secondsAndMs.split('.');
+        
+        const totalMinutes = parseInt(days) * 24 * 60 + parseInt(hours) * 60 + parseInt(minutes);
+        const msFormatted = milliseconds ? milliseconds.substring(0, 3) : '000';
+        
+        // Format as MM:SS.mmm (lap time format)
+        return `${totalMinutes}:${seconds.padStart(2, '0')}.${msFormatted}`;
+      }
+    }
+    
+    // Handle other formats
+    return lapTime;
   }
 }
 
