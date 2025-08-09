@@ -1,0 +1,103 @@
+{
+  "timestamp": "2025-08-09T10:18:10.599Z",
+  "results": [
+    {
+      "name": "1) Multi-dimensional comparison",
+      "steps": [
+        {
+          "query": "Compare Max Verstappen and Lewis Hamilton's performance in the 2024 season",
+          "answer": "VER's performance in the 2024 Grand Prix:\n• Fastest Lap: 1:14.569\n• Total Laps: 78\n"
+        }
+      ]
+    },
+    {
+      "name": "2) Contextual reasoning (follow-ups)",
+      "steps": [
+        {
+          "query": "Who won the 2024 Bahrain Grand Prix?",
+          "answer": "The Bahrain Grand Prix was won by Max Verstappen driving for Red Bull Racing. Sergio Perez finished second for Red Bull Racing, and Carlos Sainz came third for Ferrari."
+        },
+        {
+          "query": "What about their fastest lap?",
+          "answer": "I couldn't find fastest lap data for STE in the null Grand Prix."
+        },
+        {
+          "query": "How did they perform compared to their teammate?",
+          "answer": "Oscar Piastri is currently leading the championship with 284 points and 6 wins,  outperforming his McLaren teammate Lando Norris, who has 275 points and 5 wins."
+        }
+      ]
+    },
+    {
+      "name": "3) Temporal intelligence",
+      "steps": [
+        {
+          "query": "What's the current championship situation and who's likely to win next?",
+          "answer": "HAM's performance in the null Grand Prix:\n• Fastest Lap: 1:14.165\n• Total Laps: 78\n"
+        }
+      ]
+    },
+    {
+      "name": "4) Ambiguity resolution",
+      "steps": [
+        {
+          "query": "What happened in Monaco?",
+          "answer": "The Monaco Grand Prix was won by Lando Norris driving for McLaren. Charles Leclerc finished second for Ferrari, and Oscar Piastri came third for McLaren."
+        }
+      ]
+    },
+    {
+      "name": "5) Cross-domain team analysis",
+      "steps": [
+        {
+          "query": "Analyze Red Bull's dominance this season and explain their strategy",
+          "answer": "STR's performance in the null Grand Prix:\n• Fastest Lap: 1:16.710\n• Total Laps: 76\n"
+        }
+      ]
+    },
+    {
+      "name": "6) Data availability",
+      "steps": [
+        {
+          "query": "What was the weather like during the 2024 Monaco Grand Prix?",
+          "answer": "undefined's performance in the 2024 Monaco Grand Prix:\n• Fastest Lap: 1:16.710\n• Total Laps: 76\n"
+        }
+      ]
+    },
+    {
+      "name": "7) Live vs historical",
+      "steps": [
+        {
+          "query": "What's happening in the current race?",
+          "answer": "The Hungarian Grand Prix was won by Lando Norris driving for McLaren. Oscar Piastri finished second for McLaren, and George Russell came third for Mercedes."
+        }
+      ]
+    },
+    {
+      "name": "8) Complex comparative (session types)",
+      "steps": [
+        {
+          "query": "How do the current top 3 drivers compare in qualifying vs race performance?",
+          "answer": "ERROR: {\"message\":{\"content\":\"Sorry, I encountered an error processing your F1 query. Please try again.\"}}"
+        }
+      ]
+    },
+    {
+      "name": "9) Predictive/analytical",
+      "steps": [
+        {
+          "query": "Based on current form, who's most likely to challenge for the championship?",
+          "answer": "Based on the current standings, Oscar Piastri (McLaren) is leading the championship with 284 points and 6 wins, closely followed by his teammate Lando Norris with 275 points and 5 wins.  Max Verstappen (Red Bull) is in third, but significantly behind the McLaren drivers.  So, right now, it looks like the McLaren drivers are the strongest contenders for the championship."
+        }
+      ]
+    },
+    {
+      "name": "10) User-intent adaptation",
+      "steps": [
+        {
+          "query": "I'm new to F1—explain what happened in the last race",
+          "answer": "The Hungarian Grand Prix was won by Lando Norris driving for McLaren. Oscar Piastri finished second for McLaren, and George Russell came third for Mercedes."
+        }
+      ]
+    }
+  ]
+}

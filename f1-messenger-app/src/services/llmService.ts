@@ -33,6 +33,14 @@ class LLMService {
     lastYear?: number;
     lastDriver?: string;
   } = {};
+  
+  // Enhanced caching with TTL
+  private static queryCache = new Map<string, { data: any, timestamp: number }>();
+  private static CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+  private static MAX_CACHE_SIZE = 100; // Maximum cache entries
+  
+  // Performance tracking
+  // private static performanceMetrics = new Map<string, number[]>();
 
   constructor() {
     this.initializeGemini();
@@ -48,25 +56,21 @@ class LLMService {
     const yearMatch = input.match(/(?:19|20)\d{2}/);
     if (yearMatch) {
       LLMService.conversationContext.lastYear = parseInt(yearMatch[0]);
-      console.log('🔍 Updated context year:', LLMService.conversationContext.lastYear);
     }
     
-    // Extract race name from query
-    const raceMatch = input.match(/(belgian|british|hungarian|dutch|italian|singapore|japanese|qatar|united states|mexican|brazilian|las vegas|abu dhabi|australian|chinese|miami|emilia romagna|monaco|canadian|spanish|austrian|saudi arabian|bahrain|australia)/i);
+    // Enhanced race name extraction with expanded patterns
+    const raceMatch = input.match(/(belgian|british|hungarian|dutch|italian|singapore|japanese|qatar|united states|mexican|brazilian|las vegas|abu dhabi|australian|chinese|miami|emilia romagna|monaco|canadian|spanish|austrian|saudi arabian|bahrain|australia|mexico|usa|united states|emilia|romagna)/i);
     if (raceMatch) {
       LLMService.conversationContext.lastRace = raceMatch[0];
-      console.log('🔍 Updated context race:', LLMService.conversationContext.lastRace);
     }
     
-    // Extract driver name from query
+    // Extract driver name from query with enhanced code mapping
     const driverName = this.extractDriverNameFromQuery(userInput);
     if (driverName) {
       LLMService.conversationContext.lastDriver = driverName;
-      console.log('🔍 Updated context driver:', LLMService.conversationContext.lastDriver);
     }
     
     LLMService.conversationContext.lastQuery = userInput;
-    console.log('🔍 Updated conversation context:', LLMService.conversationContext);
   }
 
   /**
@@ -75,14 +79,9 @@ class LLMService {
   private handleFollowUpQuestions(userInput: string): QueryPlan | null {
     const input = userInput.toLowerCase();
     
-    console.log('🔍 Checking follow-up patterns for:', input);
-    console.log('🔍 Current conversation context:', LLMService.conversationContext);
-    
     // Check for follow-up patterns
     if (input.includes('what race was this') || input.includes('which race') || input.includes('what race')) {
-      console.log('🔍 Found "what race" pattern');
       if (LLMService.conversationContext.lastRace && LLMService.conversationContext.lastYear) {
-        console.log('🔍 Context available, returning session results query');
         return {
           tool: 'get_session_results',
           arguments: {
@@ -92,8 +91,6 @@ class LLMService {
           },
           reasoning: `User asking about the race from previous context: ${LLMService.conversationContext.lastRace} ${LLMService.conversationContext.lastYear}`
         };
-      } else {
-        console.log('🔍 Context missing - lastRace:', LLMService.conversationContext.lastRace, 'lastYear:', LLMService.conversationContext.lastYear);
       }
     }
     
@@ -161,47 +158,81 @@ class LLMService {
    * Replaces basic keyword matching with actual LLM understanding
    */
   async parseQueryIntelligently(userInput: string): Promise<QueryPlan> {
+    const startTime = Date.now();
+    
     // Update conversation context
     this.updateConversationContext(userInput);
     
     // Check for follow-up questions first
     const followUpPlan = this.handleFollowUpQuestions(userInput);
     if (followUpPlan) {
-      console.log('🎯 Handling follow-up question with context:', followUpPlan);
+      this.trackPerformance('follow-up query processing', startTime);
       return followUpPlan;
     }
     
-    // Force intelligent fallback for "who won" queries to ensure correct year usage
+    // Check cache for similar queries
+    const cacheKey = this.generateCacheKey('query_plan', { userInput });
+    const cachedPlan = this.getCachedResult(cacheKey);
+    if (cachedPlan) {
+      this.trackPerformance('cached query plan retrieval', startTime);
+      return cachedPlan;
+    }
+    
+    // Check for "who won" pattern for intelligent fallback
     const input = userInput.toLowerCase();
-    console.log('🔍 Checking query for "who won" pattern:', input);
-    if (input.includes('who won') || input.includes('winner')) {
-      console.log('🎯 Forcing intelligent fallback for "who won" query to ensure correct year');
-      return this.intelligentFallbackParseQuery(userInput);
+    if (input.includes('who won') || input.includes('who was the winner')) {
+      const fallbackPlan = this.intelligentFallbackParseQuery(userInput);
+      this.setCachedResult(cacheKey, fallbackPlan);
+      this.trackPerformance('intelligent fallback query processing', startTime);
+      return fallbackPlan;
+    }
+    
+    // Check for "fastest lap" pattern for intelligent fallback
+    if (input.includes('fastest lap') || input.includes('fastest lap time')) {
+      const fallbackPlan = this.intelligentFallbackParseQuery(userInput);
+      this.setCachedResult(cacheKey, fallbackPlan);
+      this.trackPerformance('intelligent fallback query processing', startTime);
+      return fallbackPlan;
     }
 
     if (!this.isInitialized) {
-      // Fallback to basic parsing if LLM is not available
-      return this.fallbackParseQuery(userInput);
+      console.log('⚠️ LLM not initialized, using fallback parsing');
+      const fallbackPlan = this.fallbackParseQuery(userInput);
+      this.setCachedResult(cacheKey, fallbackPlan);
+      this.trackPerformance('fallback query processing', startTime);
+      return fallbackPlan;
     }
 
     try {
       const prompt = this.buildQueryParsingPrompt(userInput);
+      
       const result = await this.model.generateContent(prompt);
       const response = result.response.text();
       
-      // Parse the LLM response
       const queryPlan = this.parseLLMResponse(response, userInput);
       console.log('🧠 LLM Query Plan:', queryPlan);
+      
+      // Cache the successful query plan
+      this.setCachedResult(cacheKey, queryPlan);
+      
+      this.trackPerformance('LLM query processing', startTime);
       return queryPlan;
       
     } catch (error) {
-      console.error('❌ LLM query parsing failed:', error);
-      // Check if it's a Gemini API overload error
+      console.error('❌ Error in intelligent query parsing:', error);
+      
       if ((error as any).status === 503) {
         console.log('⚠️ Gemini API overloaded, using intelligent fallback');
-        return this.intelligentFallbackParseQuery(userInput);
+        const fallbackPlan = this.intelligentFallbackParseQuery(userInput);
+        this.setCachedResult(cacheKey, fallbackPlan);
+        this.trackPerformance('intelligent fallback after error', startTime);
+        return fallbackPlan;
       }
-      return this.fallbackParseQuery(userInput);
+      
+      const fallbackPlan = this.fallbackParseQuery(userInput);
+      this.setCachedResult(cacheKey, fallbackPlan);
+      this.trackPerformance('fallback after error', startTime);
+      return fallbackPlan;
     }
   }
 
@@ -265,14 +296,19 @@ EXAMPLES:
 Q: "when is the next race" → {"tool": "get_event_schedule", "arguments": {"year": ${currentYear}}, "reasoning": "User asks about next race, using current year ${currentYear}"}
 Q: "what was the last race" → {"tool": "get_event_schedule", "arguments": {"year": ${currentYear}}, "reasoning": "User asks about last race, meaning most recent race in current season ${currentYear}"}
 Q: "who won the Belgian Grand Prix" → {"tool": "get_session_results", "arguments": {"year": ${currentYear}, "event_identifier": "Belgian Grand Prix", "session_name": "Race"}, "reasoning": "User asks about winner of Belgian GP, using current year ${currentYear}"}
-Q: "who had the fastest lap time in the 2025 British GP" → {"tool": "get_session_results", "arguments": {"year": 2025, "event_identifier": "British Grand Prix", "session_name": "Race"}, "reasoning": "User asks about fastest lap time in specific race"}
+Q: "who had the fastest lap time in the 2025 British GP" → {"tool": "get_session_results", "arguments": {"year": 2025, "event_identifier": "British Grand Prix", "session_name": "Race"}, "reasoning": "User asks about fastest lap time, need to get session results first"}
+Q: "who had the fastest lap in 2024 bahrain GP" → {"tool": "get_session_results", "arguments": {"year": 2024, "event_identifier": "Bahrain Grand Prix", "session_name": "Race"}, "reasoning": "User asks about fastest lap, need to get session results first"}
+Q: "fastest lap 2024 australian GP" → {"tool": "get_session_results", "arguments": {"year": 2024, "event_identifier": "Australian Grand Prix", "session_name": "Race"}, "reasoning": "User asks about fastest lap, need to get session results first"}
+Q: "who set the fastest lap in 2023 monaco GP" → {"tool": "get_session_results", "arguments": {"year": 2023, "event_identifier": "Monaco Grand Prix", "session_name": "Race"}, "reasoning": "User asks about fastest lap, need to get session results first"}
 Q: "current championship standings" → {"tool": "get_championship_standings", "arguments": {"year": ${currentYear}}, "reasoning": "User wants current season standings"}
 Q: "tell me about 2023 championships" → {"tool": "get_championship_standings", "arguments": {"year": 2023}, "reasoning": "User specifically mentions 2023"}
 Q: "Hamilton 2022 performance" → {"tool": "analyze_driver_performance", "arguments": {"year": 2022, "driver_identifier": "HAM"}, "reasoning": "User specifically mentions 2022"}
 Q: "compare Verstappen and Norris" → {"tool": "get_championship_standings", "arguments": {"year": ${currentYear}}, "reasoning": "Compare current season drivers"}
-Q: "what was kimi raikkonen's fastest lap time in 2012?" → {"tool": "get_session_results", "arguments": {"year": 2012, "event_identifier": "Australian Grand Prix", "session_name": "Race"}, "reasoning": "User asks for specific driver's fastest lap, use first race of the year"}
-Q: "kimi raikkonen fastest lap time 2012 australian GP" → {"tool": "get_session_results", "arguments": {"year": 2012, "event_identifier": "Australian Grand Prix", "session_name": "Race"}, "reasoning": "User asks for specific driver's fastest lap"}
-Q: "hamilton fastest lap time 2012 australian GP" → {"tool": "get_session_results", "arguments": {"year": 2012, "event_identifier": "Australian Grand Prix", "session_name": "Race"}, "reasoning": "User asks for specific driver's fastest lap"}
+Q: "what was kimi raikkonen's fastest lap time in 2012?" → {"tool": "analyze_driver_performance", "arguments": {"year": 2012, "event_identifier": "Australian Grand Prix", "session_name": "Race", "driver_identifier": "RAI"}, "reasoning": "User asks for specific driver's fastest lap, need to analyze that driver's performance"}
+Q: "kimi raikkonen fastest lap time 2012 australian GP" → {"tool": "analyze_driver_performance", "arguments": {"year": 2012, "event_identifier": "Australian Grand Prix", "session_name": "Race", "driver_identifier": "RAI"}, "reasoning": "User asks for specific driver's fastest lap"}
+Q: "hamilton fastest lap time 2012 australian GP" → {"tool": "analyze_driver_performance", "arguments": {"year": 2012, "event_identifier": "Australian Grand Prix", "session_name": "Race", "driver_identifier": "HAM"}, "reasoning": "User asks for specific driver's fastest lap"}
+Q: "what was max verstappen's fastest lap in 2024 bahrain GP" → {"tool": "analyze_driver_performance", "arguments": {"year": 2024, "event_identifier": "Bahrain Grand Prix", "session_name": "Race", "driver_identifier": "VER"}, "reasoning": "User asks for specific driver's fastest lap, need to analyze that driver's performance"}
+Q: "verstappen fastest lap 2024 bahrain" → {"tool": "analyze_driver_performance", "arguments": {"year": 2024, "event_identifier": "Bahrain Grand Prix", "session_name": "Race", "driver_identifier": "VER"}, "reasoning": "User asks for specific driver's fastest lap"}
 Q: "whats up" → {"tool": "conversational", "arguments": {}, "reasoning": "Casual greeting, respond conversationally"}
 Q: "hello" → {"tool": "conversational", "arguments": {}, "reasoning": "Casual greeting, respond conversationally"}
 Q: "how are you" → {"tool": "conversational", "arguments": {}, "reasoning": "Casual greeting, respond conversationally"}
@@ -301,7 +337,7 @@ RESPONSE:`;
       const parsed = JSON.parse(jsonMatch[0]);
       
       // Debug: Log the raw LLM response
-      console.log('🔍 Raw LLM response:', JSON.stringify(parsed, null, 2));
+  
       
       // Normalize driver identifiers
       if (parsed.arguments?.driver_identifier) {
@@ -362,7 +398,7 @@ RESPONSE:`;
     // Fallback to existing logic for "who won" queries
     const input = userInput.toLowerCase();
     const currentYear = new Date().getFullYear();
-    
+
     // Extract year from query first
     const yearMatch = input.match(/(?:19|20)\d{2}/);
     const year = yearMatch ? parseInt(yearMatch[0]) : currentYear;
@@ -380,6 +416,45 @@ RESPONSE:`;
             session_name: 'Race'
           },
           reasoning: `User asks for winner of ${raceName}, using year ${year}`
+        };
+      }
+    }
+    
+    // Handle "fastest lap" queries
+    if (input.includes('fastest lap') || input.includes('fastest lap time')) {
+      const raceMatch = input.match(/(belgian|british|hungarian|dutch|italian|singapore|japanese|qatar|united states|mexican|brazilian|las vegas|abu dhabi|australian|chinese|miami|emilia romagna|monaco|canadian|spanish|austrian|saudi arabian|bahrain)/i);
+      if (raceMatch) {
+        const raceName = raceMatch[0].charAt(0).toUpperCase() + raceMatch[0].slice(1) + ' Grand Prix';
+        
+        // Check if it's a driver-specific fastest lap query
+        const driverMatch = input.match(/(verstappen|hamilton|norris|leclerc|sainz|russell|alonso|perez|bottas|gasly|ocon|stroll|albon|tsunoda|ricciardo|zhou|magnussen|hulkenberg|sargeant|lawson|piastri|de vries|lawson|drugovich|doohan|vips|lawson|piastri|de vries|lawson|drugovich|doohan|vips)/i);
+        
+        if (driverMatch) {
+          // Driver-specific fastest lap
+          const driverCode = this.extractDriverNameFromQuery(userInput);
+          if (driverCode) {
+            return {
+              tool: 'analyze_driver_performance',
+              arguments: {
+                year: year,
+                event_identifier: raceName,
+                session_name: 'Race',
+                driver_identifier: driverCode
+              },
+              reasoning: `User asks for specific driver's fastest lap in ${raceName}, using year ${year}`
+            };
+          }
+        }
+        
+        // General fastest lap query
+        return {
+          tool: 'get_session_results',
+          arguments: {
+            year: year,
+            event_identifier: raceName,
+            session_name: 'Race'
+          },
+          reasoning: `User asks for fastest lap in ${raceName}, using year ${year}`
         };
       }
     }
@@ -448,9 +523,7 @@ RESPONSE:`;
     if (userInput && userInput.toLowerCase().includes('fastest lap') && resultsData) {
       // Extract driver name from query if specified
       const driverName = this.extractDriverNameFromQuery(userInput);
-      console.log('🔍 Extracted driver name from query:', driverName);
       const fastestLapData = this.extractFastestLapData(resultsData, driverName);
-      console.log('🔍 Fastest lap data:', fastestLapData);
       
       if (fastestLapData) {
         // For fastest lap queries, only show the fastest lap information
@@ -492,101 +565,93 @@ RESPONSE:`;
    * Extract fastest lap data from results
    */
   private extractFastestLapData(resultsData: any, targetDriver?: string): { driver: string, team: string, lapTime: string } | null {
-    if (!Array.isArray(resultsData) || resultsData.length < 20) {
-      return null;
+    
+    // Handle nested data structure from MCP bridge
+    let actualData = resultsData;
+    if (resultsData && resultsData.data && resultsData.data.data) {
+      actualData = resultsData.data.data;
+    } else if (resultsData && resultsData.data) {
+      actualData = resultsData.data;
     }
     
-    try {
-      // Object 18 contains fastest lap times
-      const fastestLapTimes = resultsData[18];
-      const driverNames = resultsData[9]; // Full driver names like "Kimi Räikkönen"
-      const teamNames = resultsData[4];
+    // Handle analyze_driver_performance format (object with FastestLap field)
+    if (actualData && typeof actualData === 'object' && actualData.FastestLap) {
+      const fastestLap = actualData.FastestLap;
+      const driverCode = actualData.DriverCode;
       
-      console.log('🔍 Full results data structure:', JSON.stringify(resultsData, null, 2));
+      if (fastestLap && fastestLap !== 'NaT' && fastestLap !== '') {
+        const formattedTime = this.formatLapTime(fastestLap);
+        return {
+          driver: driverCode || 'Unknown Driver',
+          team: actualData.Team || 'Unknown Team',
+          lapTime: formattedTime
+        };
+      }
+    }
+    
+    // Handle get_session_results format (array-based structure)
+    if (Array.isArray(actualData) && actualData.length >= 20) {
+      
+      // Object 18 contains fastest lap times
+      const fastestLapTimes = actualData[18];
+      const driverNames = actualData[9]; // Full driver names like "Kimi Räikkönen"
+      const teamNames = actualData[4];
       
       if (!fastestLapTimes || !driverNames || !teamNames) {
         return null;
       }
       
-      // If target driver is specified, find their lap time
-      if (targetDriver) {
-        console.log('🔍 Looking for driver:', targetDriver);
-        console.log('🔍 Driver names available:', JSON.stringify(driverNames, null, 2));
-        console.log('🔍 Fastest lap times available:', JSON.stringify(fastestLapTimes, null, 2));
-        
-        // Hardcoded test for Kimi Räikkönen
-        if (targetDriver.toLowerCase().includes('kimi') || targetDriver.toLowerCase().includes('raikkonen')) {
-          console.log('🔍 Testing hardcoded Kimi lookup...');
-          const kimiDriverId = '9'; // Known from data structure
-          if (fastestLapTimes[kimiDriverId] && fastestLapTimes[kimiDriverId] !== 'NaT') {
-            const driverName = (driverNames as any)[kimiDriverId];
-            const teamName = (teamNames as any)[kimiDriverId];
-            const originalTimeStr = (fastestLapTimes as any)[kimiDriverId];
+      try {
+        // If target driver is specified, find their lap time
+        if (targetDriver) {
+          const targetDriverId = this.findDriverIdByName(driverNames, targetDriver);
+          
+          if (targetDriverId && fastestLapTimes[targetDriverId] && fastestLapTimes[targetDriverId] !== 'NaT') {
+            const driverName = (driverNames as any)[targetDriverId];
+            const teamName = (teamNames as any)[targetDriverId];
+            const originalTimeStr = (fastestLapTimes as any)[targetDriverId];
             const formattedTime = this.formatLapTime(originalTimeStr);
             
-            console.log('🔍 Hardcoded Kimi data found!');
             return {
-              driver: driverName || `Driver ${kimiDriverId}`,
+              driver: driverName || `Driver ${targetDriverId}`,
               team: teamName || 'Unknown Team',
               lapTime: formattedTime
             };
           }
+          return null;
         }
         
-        const targetDriverId = this.findDriverIdByName(driverNames, targetDriver);
-        console.log('🔍 Found driver ID:', targetDriverId);
+        // Find the fastest lap time (shortest time that's not NaT)
+        let fastestDriverId: string | null = null;
+        let minMilliseconds: number = Infinity;
         
-        if (targetDriverId && fastestLapTimes[targetDriverId] && fastestLapTimes[targetDriverId] !== 'NaT') {
-          const driverName = (driverNames as any)[targetDriverId];
-          const teamName = (teamNames as any)[targetDriverId];
-          const originalTimeStr = (fastestLapTimes as any)[targetDriverId];
-          const formattedTime = this.formatLapTime(originalTimeStr);
-          
-          console.log('🔍 Driver name found:', driverName);
-          console.log('🔍 Team name found:', teamName);
-          console.log('🔍 Original time string:', originalTimeStr);
-          console.log('🔍 Formatted time:', formattedTime);
+        Object.entries(fastestLapTimes).forEach(([driverId, lapTime]) => {
+          if (lapTime && lapTime !== 'NaT' && lapTime !== '') {
+            const timeStr = lapTime.toString();
+            const parsedMs = this.parseLapTimeToMilliseconds(timeStr);
+            
+            if (!isNaN(parsedMs) && parsedMs < minMilliseconds) {
+              minMilliseconds = parsedMs;
+              fastestDriverId = driverId;
+            }
+          }
+        });
+        
+        if (fastestDriverId && minMilliseconds !== Infinity) {
+          const driverName = (driverNames as any)[fastestDriverId];
+          const teamName = (teamNames as any)[fastestDriverId];
+          const originalFastestTimeStr = (fastestLapTimes as any)[fastestDriverId];
+          const formattedTime = this.formatLapTime(originalFastestTimeStr);
           
           return {
-            driver: driverName || `Driver ${targetDriverId}`,
+            driver: driverName || `Driver ${fastestDriverId}`,
             team: teamName || 'Unknown Team',
             lapTime: formattedTime
           };
         }
-        console.log('🔍 Driver not found or no lap time available');
-        return null;
+      } catch (error) {
+        console.error('Error extracting fastest lap data:', error);
       }
-      
-      // Find the fastest lap time (shortest time that's not NaT)
-      let fastestDriverId: string | null = null;
-      let minMilliseconds: number = Infinity;
-      
-      Object.entries(fastestLapTimes).forEach(([driverId, lapTime]) => {
-        if (lapTime && lapTime !== 'NaT' && lapTime !== '') {
-          const timeStr = lapTime.toString();
-          const parsedMs = this.parseLapTimeToMilliseconds(timeStr);
-          
-          if (!isNaN(parsedMs) && parsedMs < minMilliseconds) {
-            minMilliseconds = parsedMs;
-            fastestDriverId = driverId;
-          }
-        }
-      });
-      
-      if (fastestDriverId && minMilliseconds !== Infinity) {
-        const driverName = (driverNames as any)[fastestDriverId];
-        const teamName = (teamNames as any)[fastestDriverId];
-        const originalFastestTimeStr = (fastestLapTimes as any)[fastestDriverId];
-        const formattedTime = this.formatLapTime(originalFastestTimeStr);
-        
-        return {
-          driver: driverName || `Driver ${fastestDriverId}`,
-          team: teamName || 'Unknown Team',
-          lapTime: formattedTime
-        };
-      }
-    } catch (error) {
-      console.error('Error extracting fastest lap data:', error);
     }
     
     return null;
@@ -597,46 +662,65 @@ RESPONSE:`;
    */
   private extractDriverNameFromQuery(userInput: string): string | undefined {
     const input = userInput.toLowerCase();
-    console.log('🔍 Extracting driver name from query:', userInput);
-    console.log('🔍 Lowercase input:', input);
     
-    // Common driver name patterns
+    // Enhanced driver patterns with F1 codes
     const driverPatterns = [
-      'kimi raikkonen', 'raikkonen', 'kimi', 'kimi räikkönen', 'räikkönen',
-      'lewis hamilton', 'hamilton', 'lewis',
-      'max verstappen', 'verstappen', 'max',
-      'charles leclerc', 'leclerc', 'charles',
-      'lando norris', 'norris', 'lando',
-      'carlos sainz', 'sainz', 'carlos',
-      'sebastian vettel', 'vettel', 'seb',
-      'fernando alonso', 'alonso', 'fernando',
-      'daniel ricciardo', 'ricciardo', 'daniel',
-      'sergio perez', 'perez', 'checo',
-      'valtteri bottas', 'bottas', 'valtteri',
-      'george russell', 'russell', 'george',
-      'esteban ocon', 'ocon', 'esteban',
-      'pierre gasly', 'gasly', 'pierre',
-      'yuki tsunoda', 'tsunoda', 'yuki',
-      'alex albon', 'albon', 'alex',
-      'lance stroll', 'stroll', 'lance',
-      'nico hulkenberg', 'hulkenberg', 'nico',
-      'kevin magnussen', 'magnussen', 'kevin',
-      'nico rosberg', 'rosberg',
-      'jenson button', 'button', 'jenson',
-      'felipe massa', 'massa', 'felipe',
-      'mark webber', 'webber', 'mark',
-      'michael schumacher', 'schumacher', 'michael',
-      'jenson button', 'button', 'jenson'
+      // Current drivers (2024)
+      { pattern: /max verstappen|verstappen|max|ver/, code: 'VER' },
+      { pattern: /lewis hamilton|hamilton|lewis|ham/, code: 'HAM' },
+      { pattern: /charles leclerc|leclerc|charles|lec/, code: 'LEC' },
+      { pattern: /lando norris|norris|lando|nor/, code: 'NOR' },
+      { pattern: /carlos sainz|sainz|carlos|sai/, code: 'SAI' },
+      { pattern: /george russell|russell|george|rus/, code: 'RUS' },
+      { pattern: /fernando alonso|alonso|fernando|alo/, code: 'ALO' },
+      { pattern: /oscar piastri|piastri|oscar|pia/, code: 'PIA' },
+      { pattern: /sergio perez|perez|checo|per/, code: 'PER' },
+      { pattern: /daniel ricciardo|ricciardo|daniel|ric/, code: 'RIC' },
+      { pattern: /valtteri bottas|bottas|valtteri|bot/, code: 'BOT' },
+      { pattern: /esteban ocon|ocon|esteban|oco/, code: 'OCO' },
+      { pattern: /pierre gasly|gasly|pierre|gas/, code: 'GAS' },
+      { pattern: /yuki tsunoda|tsunoda|yuki|tsu/, code: 'TSU' },
+      { pattern: /alex albon|albon|alex|alb/, code: 'ALB' },
+      { pattern: /lance stroll|stroll|lance|str/, code: 'STR' },
+      { pattern: /nico hulkenberg|hulkenberg|nico|hul/, code: 'HUL' },
+      { pattern: /kevin magnussen|magnussen|kevin|mag/, code: 'MAG' },
+      { pattern: /guanyu zhou|zhou|guanyu|zho/, code: 'ZHO' },
+      { pattern: /logan sargeant|sargeant|logan|sar/, code: 'SAR' },
+      
+      // Historical drivers
+      { pattern: /kimi raikkonen|raikkonen|kimi|kimi räikkönen|räikkönen|rai/, code: 'RAI' },
+      { pattern: /sebastian vettel|vettel|seb|vet/, code: 'VET' },
+      { pattern: /jenson button|button|jenson|but/, code: 'BUT' },
+      { pattern: /felipe massa|massa|felipe|mas/, code: 'MAS' },
+      { pattern: /mark webber|webber|mark|web/, code: 'WEB' },
+      { pattern: /michael schumacher|schumacher|michael|sch/, code: 'SCH' },
+      { pattern: /nico rosberg|rosberg|nico|ros/, code: 'ROS' },
+      { pattern: /jenson button|button|jenson|but/, code: 'BUT' },
+      { pattern: /robert kubica|kubica|robert|kub/, code: 'KUB' },
+      { pattern: /heikki kovalainen|kovalainen|heikki|kov/, code: 'KOV' },
+      { pattern: /giancarlo fisichella|fisichella|giancarlo|fis/, code: 'FIS' },
+      { pattern: /rubens barrichello|barrichello|rubens|bar/, code: 'BAR' },
+      { pattern: /david coulthard|coulthard|david|cou/, code: 'COU' },
+      { pattern: /eddie irvine|irvine|eddie|irv/, code: 'IRV' },
+      { pattern: /damon hill|hill|damon|hil/, code: 'HIL' },
+      { pattern: /nigel mansell|mansell|nigel|man/, code: 'MAN' },
+      { pattern: /ayrton senna|senna|ayrton|sen/, code: 'SEN' },
+      { pattern: /alain prost|prost|alain|pro/, code: 'PRO' },
+      { pattern: /nelson piquet|piquet|nelson|piq/, code: 'PIQ' },
+      { pattern: /niki lauda|lauda|niki|lau/, code: 'LAU' },
+      { pattern: /james hunt|hunt|james|hun/, code: 'HUN' },
+      { pattern: /emerson fittipaldi|fittipaldi|emerson|fit/, code: 'FIT' },
+      { pattern: /jackie stewart|stewart|jackie|ste/, code: 'STE' },
+      { pattern: /jim clark|clark|jim|cla/, code: 'CLA' },
+      { pattern: /stirling moss|moss|stirling|mos/, code: 'MOS' },
+      { pattern: /juan manuel fangio|fangio|juan manuel|fan/, code: 'FAN' }
     ];
     
-    for (const pattern of driverPatterns) {
-      if (input.includes(pattern)) {
-        console.log('🔍 Found driver pattern:', pattern);
-        return pattern;
+    for (const driver of driverPatterns) {
+      if (driver.pattern.test(input)) {
+        return driver.code;
       }
     }
-    
-    console.log('🔍 No driver pattern found');
     return undefined;
   }
 
@@ -645,8 +729,6 @@ RESPONSE:`;
    */
   private findDriverIdByName(driverNames: any, targetDriver: string): string | null {
     const targetLower = targetDriver.toLowerCase();
-    console.log('🔍 Searching for driver:', targetLower);
-    console.log('🔍 Available driver names:', Object.values(driverNames || {}));
     
     // Normalize target driver name (remove umlauts, special characters)
     const normalizedTarget = targetLower
@@ -659,7 +741,7 @@ RESPONSE:`;
       .replace(/ç/g, 'c')
       .replace(/ñ/g, 'n');
     
-    console.log('🔍 Normalized target:', normalizedTarget);
+
     
     for (const [driverId, driverName] of Object.entries(driverNames)) {
       if (driverName && typeof driverName === 'string') {
@@ -674,15 +756,12 @@ RESPONSE:`;
           .replace(/ç/g, 'c')
           .replace(/ñ/g, 'n');
         
-        console.log('🔍 Checking driver:', normalizedDriverName, 'against target:', normalizedTarget);
         if (normalizedDriverName.includes(normalizedTarget) || normalizedTarget.includes(normalizedDriverName)) {
-          console.log('🔍 Match found! Driver ID:', driverId, 'Name:', driverName);
           return driverId;
         }
       }
     }
     
-    console.log('🔍 No match found for driver:', targetLower);
     return null;
   }
 
@@ -716,14 +795,11 @@ RESPONSE:`;
     if (lapTime.includes('days')) {
       const match = lapTime.match(/(\d+) days (\d+):(\d+):(\d+\.\d+)/);
       if (match) {
-        const [, days, hours, minutes, secondsAndMs] = match;
-        const [seconds, milliseconds] = secondsAndMs.split('.');
-        
-        const totalMinutes = parseInt(days) * 24 * 60 + parseInt(hours) * 60 + parseInt(minutes);
-        const msFormatted = milliseconds ? milliseconds.substring(0, 3) : '000';
-        
-        // Format as MM:SS.mmm (lap time format)
-        return `${totalMinutes}:${seconds.padStart(2, '0')}.${msFormatted}`;
+        const [, days, hours, mins, secondsAndMs] = match;
+        const totalSeconds = parseInt(days) * 86400 + parseInt(hours) * 3600 + parseInt(mins) * 60 + parseFloat(secondsAndMs);
+        const totalMins = Math.floor(totalSeconds / 60);
+        const seconds = totalSeconds % 60;
+        return `${totalMins}:${seconds.toFixed(3).padStart(6, '0')}`;
       }
     }
     
@@ -732,9 +808,110 @@ RESPONSE:`;
   }
 
   /**
+   * Enhanced synthesis for fastest lap queries
+   */
+  private synthesizeFastestLapResponse(userInput: string, toolResult: any): string {
+
+    
+    // Handle the nested data structure from MCP bridge
+    let dataToProcess = toolResult;
+    if (toolResult && toolResult.data) {
+      dataToProcess = toolResult.data;
+    }
+    
+    const fastestLapData = this.extractFastestLapData(dataToProcess);
+    
+    if (!fastestLapData) {
+      return "I couldn't find fastest lap data for that race.";
+    }
+    
+    const { driver, team, lapTime } = fastestLapData;
+    const raceName = this.extractRaceNameFromQuery(userInput);
+    const year = this.extractYearFromQuery(userInput) || new Date().getFullYear();
+    
+    return `${driver} driving for ${team} set the fastest lap in the ${year} ${raceName} with a time of ${lapTime}.`;
+  }
+
+  /**
+   * Enhanced synthesis for driver performance
+   */
+  private synthesizeDriverPerformanceResponse(userInput: string, toolResult: any): string {
+    // Handle the nested data structure from MCP bridge
+    let perfData = toolResult;
+    
+    if (toolResult && toolResult.data) {
+      perfData = toolResult.data;
+      
+      // Handle double-nested data structure
+      if (perfData && perfData.data) {
+        perfData = perfData.data;
+        
+        // Handle triple-nested data structure (data.data.data)
+        if (perfData && perfData.data) {
+          perfData = perfData.data;
+        }
+      }
+    }
+    
+    if (!perfData) return "I couldn't retrieve driver performance data.";
+    
+
+    
+    const driverName = this.extractDriverNameFromQuery(userInput);
+    const raceName = this.extractRaceNameFromQuery(userInput);
+    const year = this.extractYearFromQuery(userInput);
+    
+    // If this is a fastest lap query, provide a focused response
+    if (userInput.toLowerCase().includes('fastest lap')) {
+      if (perfData.FastestLap) {
+        const formattedTime = this.formatLapTime(perfData.FastestLap);
+        const driverCode = perfData.DriverCode || driverName;
+        const response = `${driverCode}'s fastest lap in the ${year} ${raceName} was ${formattedTime}.`;
+        return response;
+      } else {
+        const response = `I couldn't find fastest lap data for ${driverName} in the ${year} ${raceName}.`;
+        return response;
+      }
+    }
+    
+    // For general driver performance queries
+    let response = `${driverName}'s performance in the ${year} ${raceName}:\n`;
+    
+    if (perfData.FastestLap) {
+      response += `• Fastest Lap: ${this.formatLapTime(perfData.FastestLap)}\n`;
+    }
+    if (perfData.TotalLaps) {
+      response += `• Total Laps: ${perfData.TotalLaps}\n`;
+    }
+    if (perfData.FinishingPosition) {
+      response += `• Finishing Position: ${perfData.FinishingPosition}\n`;
+    }
+    if (perfData.Points) {
+      response += `• Points Earned: ${perfData.Points}\n`;
+    }
+    
+    return response;
+  }
+
+  /**
+   * Extract year from query
+   */
+  private extractYearFromQuery(userInput: string): number | null {
+    const yearMatch = userInput.match(/(?:19|20)\d{2}/);
+    return yearMatch ? parseInt(yearMatch[0]) : null;
+  }
+
+  /**
    * Synthesize natural language response using LLM
    */
   async synthesizeResponse(userInput: string, toolResult: any, toolName: string): Promise<string> {
+    const startTime = Date.now();
+    
+    // Validate tool result first
+    if (!this.validateToolResult(toolResult, toolName)) {
+      return this.handleToolError({ status: 400, message: 'Invalid tool result' }, toolName);
+    }
+    
     // Add year validation for session results to prevent hallucination
     if (toolName === 'get_session_results') {
       const currentYear = new Date().getFullYear();
@@ -745,9 +922,31 @@ RESPONSE:`;
       }
     }
 
+                      // Handle fastest lap queries with enhanced synthesis
+                  if (userInput.toLowerCase().includes('fastest lap')) {
+                    if (toolName === 'get_session_results') {
+                      const response = this.synthesizeFastestLapResponse(userInput, toolResult);
+                      this.trackPerformance('fastest lap synthesis', startTime);
+                      return response;
+                    } else if (toolName === 'analyze_driver_performance') {
+                      const response = this.synthesizeDriverPerformanceResponse(userInput, toolResult);
+                      this.trackPerformance('driver performance synthesis', startTime);
+                      return response;
+                    }
+                  }
+
+                  // Handle driver performance queries with enhanced synthesis
+                  if (toolName === 'analyze_driver_performance' && toolResult.data) {
+                    const response = this.synthesizeDriverPerformanceResponse(userInput, toolResult);
+                    this.trackPerformance('driver performance synthesis', startTime);
+                    return response;
+    }
+
     if (!this.isInitialized) {
       // Fallback to basic synthesis
-      return this.fallbackSynthesize(toolResult, toolName);
+      const response = this.fallbackSynthesize(toolResult, toolName);
+      this.trackPerformance('fallback synthesis', startTime);
+      return response;
     }
 
     try {
@@ -761,7 +960,9 @@ RESPONSE:`;
             'the race';
           const year = LLMService.conversationContext.lastYear || 'the specified year';
           
-          return `${perfData.DriverCode || 'The driver'}'s fastest lap in ${raceName} ${year} was ${formattedLapTime}. This was their fastest lap time across ${perfData.TotalLaps || 'multiple'} laps.`;
+          const response = `${perfData.DriverCode || 'The driver'}'s fastest lap in ${raceName} ${year} was ${formattedLapTime}. This was their fastest lap time across ${perfData.TotalLaps || 'multiple'} laps.`;
+          this.trackPerformance('driver performance synthesis', startTime);
+          return response;
         }
       }
       
@@ -782,15 +983,12 @@ RESPONSE:`;
         const scheduleData = toolResult.primaryResult.data?.data || toolResult.primaryResult.data;
         const resultsData = toolResult.followUpResult.data?.data || toolResult.followUpResult.data;
         
-        console.log('🔍 Processing combined results...');
-        console.log('🔍 Results data length:', resultsData ? resultsData.length : 'undefined');
-        console.log('🔍 Results data type:', typeof resultsData);
+        
         
         // Process race results to extract podium positions clearly
         let processedResults = resultsData;
         if (Array.isArray(resultsData) && resultsData.length > 0) {
-          console.log('🔍 Results data is array with length:', resultsData.length);
-          console.log('🔍 First result object keys:', Object.keys(resultsData[0] || {}));
+          
           
                     // The bridge returns a complex array structure with driver data
           // Object 0: Driver numbers (positions)
@@ -798,7 +996,7 @@ RESPONSE:`;
           // Object 2: Driver codes (3-letter codes)
           // Object 3: Driver identifiers
           // Object 4: Team names
-          console.log('🔍 Raw results data structure:', JSON.stringify(resultsData.slice(0, 2), null, 2));
+      
           
           // Extract podium based on actual race positions
           let podium: Array<{position: number, driver: string, team: string}> = [];
@@ -808,28 +1006,22 @@ RESPONSE:`;
             const driverNames = resultsData[9]; // Object 9 contains full driver names like "Jenson Button"
             const teamNames = resultsData[4]; // Object 4 contains team names
             
-            console.log('🔍 Raw resultsData[9]:', JSON.stringify(resultsData[9], null, 2));
-            console.log('🔍 Raw resultsData[13]:', JSON.stringify(resultsData[13], null, 2));
-            console.log('🔍 Raw resultsData[4]:', JSON.stringify(resultsData[4], null, 2));
-            console.log('🔍 Raw resultsData[7]:', JSON.stringify(resultsData[7], null, 2));
-            console.log('🔍 Raw resultsData[8]:', JSON.stringify(resultsData[8], null, 2));
             
-            console.log('🔍 Position data keys:', Object.keys(positionData || {}));
-            console.log('🔍 Driver names available:', Object.keys(driverNames || {}));
-            console.log('🔍 Team names available:', Object.keys(teamNames || {}));
+            
+            
             
             if (positionData && driverNames && teamNames) {
               // Extract podium positions (1st, 2nd, 3rd)
               const podiumPositions = Object.entries(positionData)
-                .filter(([driverId, position]) => {
+                                .filter(([, position]) => {
                   const pos = parseInt(position as string);
-                  console.log(`🔍 Checking driver ${driverId}: position ${position} -> ${pos}`);
+               
                   return !isNaN(pos) && pos >= 1 && pos <= 3;
                 })
                 .sort(([, a], [, b]) => parseInt(a as string) - parseInt(b as string))
                 .slice(0, 3);
               
-              console.log('🔍 Podium positions found:', podiumPositions);
+          
               
               if (podiumPositions.length >= 3) {
                 podium = podiumPositions.map(([driverId, position]) => {
@@ -883,7 +1075,7 @@ RESPONSE:`;
         processedResult = combinedData;
       } else if (toolName === 'get_session_results' && toolResult.data?.data) {
         // Handle single get_session_results tool results (for "who won" queries)
-        console.log('🔍 Processing single get_session_results result...');
+    
         const resultsData = toolResult.data.data;
         
         if (Array.isArray(resultsData) && resultsData.length >= 14) {
@@ -894,7 +1086,7 @@ RESPONSE:`;
           if (positionData && driverNames && teamNames) {
             // Extract podium positions (1st, 2nd, 3rd)
             const podiumPositions = Object.entries(positionData)
-              .filter(([driverId, position]) => {
+              .filter(([, position]) => {
                 const pos = parseInt(position as string);
                 return !isNaN(pos) && pos >= 1 && pos <= 3;
               })
@@ -1062,7 +1254,7 @@ RESPONSE:`;
    */
   private extractRaceNameFromQuery(userInput: string): string {
     const input = userInput.toLowerCase();
-    const raceMatch = input.match(/(belgian|british|hungarian|dutch|italian|singapore|japanese|qatar|united states|mexican|brazilian|las vegas|abu dhabi|australian|chinese|miami|emilia romagna|monaco|canadian|spanish|austrian|saudi arabian|bahrain)/i);
+    const raceMatch = input.match(/(belgian|british|hungarian|dutch|italian|singapore|japanese|qatar|united states|mexican|brazilian|las vegas|abu dhabi|australian|chinese|miami|emilia romagna|monaco|canadian|spanish|austrian|saudi arabian|bahrain|australia|mexico|usa|united states|emilia|romagna)/i);
     if (raceMatch) {
       return raceMatch[0].charAt(0).toUpperCase() + raceMatch[0].slice(1) + ' Grand Prix';
     }
@@ -1143,7 +1335,7 @@ RESPONSE:`;
         if (positionData && driverNames && teamNames) {
           // Extract podium positions
           const podiumPositions = Object.entries(positionData)
-            .filter(([driverId, position]) => {
+            .filter(([, position]) => {
               const pos = parseInt(position as string);
               return !isNaN(pos) && pos >= 1 && pos <= 3;
             })
@@ -1171,6 +1363,164 @@ RESPONSE:`;
     }
     
     return `📊 Data retrieved successfully. ${JSON.stringify(data).substring(0, 100)}...`;
+  }
+
+  /**
+   * Enhanced error handling with specific messages
+   */
+  private handleToolError(error: any, toolName: string): string {
+    console.error(`❌ Tool error for ${toolName}:`, error);
+    
+    if (error.status === 404) {
+      return `I couldn't find data for that query. The ${toolName} might not be available for the specified parameters.`;
+    }
+    if (error.status === 503) {
+      return `The F1 data service is temporarily unavailable. Please try again in a few moments.`;
+    }
+    if (error.message?.includes('pre-2018')) {
+      return `I apologize, but lap time data before 2018 has inconsistent formats and may not be accurate.`;
+    }
+    if (error.message?.includes('sprint')) {
+      return `I apologize, but some sprint races from the 2021 season are missing from the database.`;
+    }
+    
+    return `I encountered an error retrieving the data. Please try rephrasing your question or try again later.`;
+  }
+
+  /**
+   * Enhanced data validation
+   */
+  private validateToolResult(toolResult: any, toolName: string): boolean {
+    if (!toolResult) {
+      console.log(`❌ Invalid tool result for ${toolName}:`, toolResult);
+      return false;
+    }
+    // Accept combined wrapper { primaryResult, followUpResult, combined }
+    if (toolResult.primaryResult && toolResult.primaryResult.data) {
+      return true;
+    }
+    if (!toolResult.data) {
+      console.log(`❌ Invalid tool result for ${toolName}:`, toolResult);
+      return false;
+    }
+    
+    // Check for empty data arrays
+    if (Array.isArray(toolResult.data) && toolResult.data.length === 0) {
+      console.log(`❌ Empty data array for ${toolName}`);
+      return false;
+    }
+    
+    // Check for error conditions
+    if (toolResult.error || (toolResult.data && toolResult.data.error)) {
+      console.log(`❌ Error in tool result for ${toolName}:`, toolResult.error || toolResult.data.error);
+      return false;
+    }
+    
+    return true;
+  }
+
+  /**
+   * Enhanced logging with levels
+   */
+  private log(level: 'debug' | 'info' | 'warn' | 'error', message: string, data?: any): void {
+    const timestamp = new Date().toISOString();
+    const logMessage = `[${timestamp}] [${level.toUpperCase()}] ${message}`;
+    
+    if (level === 'error') {
+      console.error(logMessage, data);
+    } else if (level === 'warn') {
+      console.warn(logMessage, data);
+    } else if (level === 'info') {
+      console.log(logMessage, data);
+    } else if (process.env.NODE_ENV === 'development') {
+      console.log(logMessage, data);
+    }
+  }
+
+  /**
+   * Performance tracking
+   */
+  private trackPerformance(operation: string, startTime: number): void {
+    const duration = Date.now() - startTime;
+    this.log('info', `Performance: ${operation} took ${duration}ms`);
+    
+    if (duration > 5000) {
+      this.log('warn', `Slow operation detected: ${operation} took ${duration}ms`);
+    }
+  }
+
+  /**
+   * Get cached result for query
+   */
+  private getCachedResult(queryKey: string): any | null {
+    const cached = LLMService.queryCache.get(queryKey);
+    if (cached && Date.now() - cached.timestamp < LLMService.CACHE_TTL) {
+      this.log('info', `📦 Using cached result for: ${queryKey}`);
+      return cached.data;
+    }
+    return null;
+  }
+
+  /**
+   * Set cached result for query
+   */
+  private setCachedResult(queryKey: string, data: any): void {
+    // Clean up old cache entries if we're at max size
+    if (LLMService.queryCache.size >= LLMService.MAX_CACHE_SIZE) {
+      this.cleanupCache();
+    }
+    
+    LLMService.queryCache.set(queryKey, {
+      data,
+      timestamp: Date.now()
+    });
+    
+    this.log('info', `📦 Cached result for: ${queryKey}`);
+  }
+
+  /**
+   * Clean up expired cache entries
+   */
+  private cleanupCache(): void {
+    const now = Date.now();
+    for (const [key, value] of LLMService.queryCache.entries()) {
+      if (now - value.timestamp > LLMService.CACHE_TTL) {
+        LLMService.queryCache.delete(key);
+      }
+    }
+    
+    // If still too large, remove oldest entries
+    if (LLMService.queryCache.size >= LLMService.MAX_CACHE_SIZE) {
+      const entries = Array.from(LLMService.queryCache.entries());
+      entries.sort((a, b) => a[1].timestamp - b[1].timestamp);
+      
+      const toRemove = entries.slice(0, Math.floor(LLMService.MAX_CACHE_SIZE * 0.2));
+      for (const [key] of toRemove) {
+        LLMService.queryCache.delete(key);
+      }
+    }
+  }
+
+  /**
+   * Memory management for conversation context
+   */
+  private cleanupConversationContext(): void {
+    // Reset context if too old (simplified - we'll reset if no recent activity)
+    if (!LLMService.conversationContext.lastQuery) {
+      LLMService.conversationContext = {};
+      this.log('info', '🧹 Cleaned up conversation context');
+    }
+  }
+
+  /**
+   * Generate cache key for query
+   */
+  private generateCacheKey(toolName: string, args: Record<string, any>): string {
+    const sortedArgs = Object.keys(args)
+      .sort()
+      .map(key => `${key}:${args[key]}`)
+      .join('|');
+    return `${toolName}:${sortedArgs}`;
   }
 
   /**
@@ -1206,13 +1556,13 @@ RESPONSE:`;
   /**
    * Generate conversational responses for basic chat and clarification requests
    */
-  async generateConversationalResponse(userInput: string, queryPlan: any): Promise<string> {
+  async generateConversationalResponse(userInput: string): Promise<string> {
     if (!this.isInitialized) {
       return this.generateBasicConversationalResponse(userInput);
     }
 
     try {
-      const prompt = this.buildConversationalPrompt(userInput, queryPlan);
+      const prompt = this.buildConversationalPrompt(userInput);
       const result = await this.model.generateContent(prompt);
       const response = result.response.text();
       return response;
@@ -1225,7 +1575,7 @@ RESPONSE:`;
   /**
    * Build prompt for conversational responses
    */
-  private buildConversationalPrompt(userInput: string, queryPlan: any): string {
+  private buildConversationalPrompt(userInput: string): string {
     return `You are Agent HellRacer - Formula 1 Analyst with a snarky, data-driven personality.
 
 PERSONALITY:

@@ -5,6 +5,8 @@
  * Call F1 tools recursively with follow-up support
  * Shared utility to eliminate code duplication
  */
+import { normalizeDriverIdentifier } from '../services/driverMapping';
+
 export async function callF1ToolsRecursive(queryPlan: any, depth: number = 0): Promise<any> {
   const MAX_DEPTH = 3;
   if (depth >= MAX_DEPTH) {
@@ -19,7 +21,19 @@ export async function callF1ToolsRecursive(queryPlan: any, depth: number = 0): P
   
   try {
     console.log(`🔄 [Depth ${depth}] Calling F1 tool:`, queryPlan.tool, 'with args:', queryPlan.arguments);
-    const requestBody = { name: queryPlan.tool, arguments: queryPlan.arguments };
+    // Normalize arguments for known schema quirks
+    const normalizedArgs: any = { ...(queryPlan.arguments || {}) };
+    // compare_drivers expects a comma-separated string, not an array
+    if (queryPlan.tool === 'compare_drivers') {
+      if (Array.isArray(normalizedArgs.session_name)) {
+        // Pick Race by default if multiple provided
+        normalizedArgs.session_name = 'Race';
+      }
+      if (Array.isArray(normalizedArgs.drivers)) {
+        normalizedArgs.drivers = normalizedArgs.drivers.join(',');
+      }
+    }
+    const requestBody = { name: queryPlan.tool, arguments: normalizedArgs };
     console.log(`📤 [Depth ${depth}] Sending request to bridge:`, JSON.stringify(requestBody, null, 2));
     
     const response = await fetch('http://localhost:3001/mcp/tool', {
@@ -43,14 +57,133 @@ export async function callF1ToolsRecursive(queryPlan: any, depth: number = 0): P
       
       // Extract race information from schedule data for follow-up
       const followUpPlan = { ...queryPlan.followUp };
+      // Normalize follow-up arguments object
+      followUpPlan.arguments = { ...(followUpPlan.arguments || {}) };
       if (queryPlan.tool === 'get_event_schedule' && queryPlan.followUp.tool === 'get_session_results') {
-        const lastRace = extractLastRaceFromSchedule(result.data.data);
+        const scheduleInner = (result?.data?.data) ?? result?.data;
+        const lastRace = extractLastRaceFromSchedule(scheduleInner);
         if (lastRace) {
           followUpPlan.arguments.event_identifier = lastRace;
           console.log(`📍 [Depth ${depth}] Extracted last race: ${lastRace}`);
         }
       }
+
+      // Populate compare_drivers drivers from standings if missing/placeholder
+      if (queryPlan.tool === 'get_championship_standings' && followUpPlan.tool === 'compare_drivers') {
+        const standingsData = (result?.data?.data) ?? result?.data;
+        const driverRows: any[] = standingsData?.drivers || [];
+        const top3Codes: string[] = [];
+        for (let i = 0; i < Math.min(3, driverRows.length); i++) {
+          const row = driverRows[i] || {};
+          let code = row.DriverCode || row.code || row['Driver code'];
+          if (typeof code === 'string' && code.length === 3) {
+            top3Codes.push(code.toUpperCase());
+            continue;
+          }
+          // Try to derive from name fields
+          const name = row.DriverName || row.driver || row.Driver || row['Driver Name'] || '';
+          if (typeof name === 'string' && name.trim().length > 0) {
+            top3Codes.push(normalizeDriverIdentifier(name));
+            continue;
+          }
+          // Try to regex extract code from serialized Driver object text
+          const serialized = JSON.stringify(row);
+          const match = serialized.match(/code['"]?\s*[:=]\s*['"]?([A-Za-z]{3})['"]?/);
+          if (match && match[1]) {
+            top3Codes.push(match[1].toUpperCase());
+          }
+        }
+        if (top3Codes.length > 0) {
+          followUpPlan.arguments.drivers = top3Codes.join(',');
+        }
+        // Ensure event identifier is concrete; resolve last race if placeholder/absent
+        const ev = followUpPlan.arguments.event_identifier;
+        if (!ev || /all/i.test(ev)) {
+          // Fetch schedule to resolve last completed event
+          const scheduleReq = { name: 'get_event_schedule', arguments: { year: followUpPlan.arguments.year } };
+          console.log(`📤 [Depth ${depth}] Resolving last event for compare via schedule`);
+          const scheduleResp = await fetch('http://localhost:3001/mcp/tool', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(scheduleReq)
+          });
+          if (scheduleResp.ok) {
+            const scheduleJson = await scheduleResp.json();
+            const scheduleInner = scheduleJson?.data?.data ?? scheduleJson?.data;
+            const lastRace = extractLastRaceFromSchedule(scheduleInner);
+            if (lastRace) {
+              followUpPlan.arguments.event_identifier = lastRace;
+              console.log(`📍 [Depth ${depth}] compare_drivers event set to: ${lastRace}`);
+            }
+          }
+        }
+        // Final fallback: if we still lack drivers, derive top 3 codes from last race results
+        if (!followUpPlan.arguments.drivers) {
+          const scheduleReq2 = { name: 'get_event_schedule', arguments: { year: followUpPlan.arguments.year } };
+          const schedResp2 = await fetch('http://localhost:3001/mcp/tool', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(scheduleReq2)
+          });
+          if (schedResp2.ok) {
+            const schedJson2 = await schedResp2.json();
+            const schedInner2 = schedJson2?.data?.data ?? schedJson2?.data;
+            const lastRace2 = extractLastRaceFromSchedule(schedInner2);
+            if (lastRace2) {
+              const resReq = { name: 'get_session_results', arguments: { year: followUpPlan.arguments.year, event_identifier: lastRace2, session_name: 'Race' } };
+              const resResp = await fetch('http://localhost:3001/mcp/tool', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(resReq) });
+              if (resResp.ok) {
+                const resJson = await resResp.json();
+                const resData = resJson?.data?.data ?? resJson?.data;
+                if (Array.isArray(resData) && resData.length >= 14) {
+                  const positionData = resData[13];
+                  const codes = resData[2];
+                  const podiumDriverIds = Object.entries(positionData)
+                    .filter(([, position]) => !isNaN(parseInt(position as string)) && parseInt(position as string) >= 1 && parseInt(position as string) <= 3)
+                    .sort(([, a], [, b]) => parseInt(a as string) - parseInt(b as string))
+                    .map(([driverId]) => String(driverId));
+                  const podiumCodes = podiumDriverIds.map(id => (codes as any)[id]).filter(Boolean).slice(0, 3);
+                  if (podiumCodes.length > 0) {
+                    followUpPlan.arguments.drivers = podiumCodes.join(',');
+                    followUpPlan.arguments.event_identifier = lastRace2;
+                    console.log(`📍 [Depth ${depth}] compare_drivers drivers set from last race: ${followUpPlan.arguments.drivers}`);
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+
+      // Ensure compare_drivers drivers string and single session name
+      if (followUpPlan.tool === 'compare_drivers') {
+        if (Array.isArray(followUpPlan.arguments.session_name)) {
+          followUpPlan.arguments.session_name = 'Race';
+        }
+        if (Array.isArray(followUpPlan.arguments.drivers)) {
+          followUpPlan.arguments.drivers = followUpPlan.arguments.drivers.join(',');
+        }
+        // Drop placeholder driver tokens to avoid bridge errors
+        const drv = followUpPlan.arguments.drivers;
+        if (typeof drv === 'string' && /(DRIVER1|DRIVER2|DRIVER3|Top 3)/i.test(drv)) {
+          console.log(`⚠️ [Depth ${depth}] Removing placeholder drivers from follow-up to avoid errors`);
+          delete followUpPlan.arguments.drivers;
+        }
+      }
+
+      // Replace invalid analyze_driver_performance placeholders
+      if (followUpPlan.tool === 'analyze_driver_performance') {
+        const id = followUpPlan.arguments.driver_identifier;
+        if (typeof id === 'string' && /Top 3/i.test(id)) {
+          console.log(`⚠️ [Depth ${depth}] Invalid driver placeholder in follow-up; dropping follow-up`);
+          // Skip executing this unusable follow-up
+          return result;
+        }
+      }
       
+      // As a final guard: avoid calling compare_drivers without drivers to prevent 500
+      if (followUpPlan.tool === 'compare_drivers' && !followUpPlan.arguments.drivers) {
+        console.log(`⚠️ [Depth ${depth}] Skipping compare_drivers due to missing drivers after normalization`);
+        return result;
+      }
       const followUpResult = await callF1ToolsRecursive(followUpPlan, depth + 1);
       return { primaryResult: result, followUpResult, combined: true };
     }

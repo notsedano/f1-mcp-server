@@ -139,11 +139,7 @@ app.post('/api/chat', async (req, res) => {
     // Return response in Firebase-compatible format
     const response: ChatResponse = {
       message: {
-<<<<<<< HEAD
-        content: agentResponse
-=======
         content: agentResponse  // Only include 'content' field
->>>>>>> v.05-reboot
       }
     };
     
