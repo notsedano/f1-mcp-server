@@ -8,22 +8,6 @@ export interface SynthesisStage {
 }
 
 export class NLSynthesizer {
-  private fewShotExamples = `
-Q: "Compare 2023 Suzuka fastest lap vs 2024 Bahrain"
-A: Lewis Hamilton's 2023 Suzuka flyer (1:30.123) was 1.333 s quicker than Max Verstappen's 2024 Bahrain mark.
-
-Q: "Who led the 2023 constructors after round 5?"
-A: After five rounds Red Bull topped the table with 224 points, 67 clear of Mercedes.
-
-Q: "2024 driver standings"
-A: Max Verstappen leads the 2024 championship with 331 points, followed by Sergio Pérez (223) and Lewis Hamilton (201).
-
-Q: "Sebastian Vettel 2012 standings"
-A: Sebastian Vettel dominated the 2012 championship with 281 points and 5 wins, narrowly beating Fernando Alonso by just 3 points in a thrilling season finale.
-
-Q: "analysis on redbull in 2011"
-A: Red Bull dominated the 2011 season with Sebastian Vettel securing the championship with 392 points and 11 wins, while teammate Mark Webber finished third with 258 points.
-`;
 
   /**
    * Stage 1: Extract - Flatten nested JSON → key metrics dict
@@ -71,7 +55,7 @@ A: Red Bull dominated the 2011 season with Sebastian Vettel securing the champio
     // Championship standings
     if (extracted.drivers) {
       const top3 = extracted.drivers.slice(0, 3);
-      top3.forEach((driver: any, index: number) => {
+      top3.forEach((driver: any) => {
         const ordinal = this.getOrdinal(parseInt(driver.position));
         facts.push(`${ordinal} place: ${driver.givenName} ${driver.familyName} (${driver.driverCode}) with ${driver.points} points and ${driver.wins} wins`);
       });

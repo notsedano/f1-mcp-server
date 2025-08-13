@@ -84,7 +84,6 @@ class TemporalIntelligenceService {
    */
   private calculateSeasonProgress(date: Date): number {
     const month = date.getMonth() + 1;
-    const day = date.getDate();
     
     // F1 season runs from March to November (9 months)
     if (month < this.f1SeasonStartMonth) {
@@ -194,7 +193,6 @@ class TemporalIntelligenceService {
    * Determine relative time for a year
    */
   private getRelativeTime(year: number): 'past' | 'present' | 'future' {
-    const currentYear = new Date().getFullYear();
     const f1Season = this.getCurrentF1Season(new Date());
     
     if (year < f1Season) return 'past';

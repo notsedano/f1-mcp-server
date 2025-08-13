@@ -138,7 +138,7 @@ class AgenticChainService {
    */
   private buildChainPrompt(
     query: string,
-    temporalContext: TemporalContext,
+    _temporalContext: TemporalContext,
     conversationContext: ConversationContext | null,
     recursionLevel: number
   ): string {
@@ -196,7 +196,7 @@ RESPONSE:`;
   /**
    * Parse chain response into structured format
    */
-  private parseChainResponse(response: string, query: string): ChainStep {
+  private parseChainResponse(response: string, _query: string): ChainStep {
     const lines = response.split('\n');
     let thought = '';
     let action = '';
