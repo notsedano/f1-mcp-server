@@ -1,0 +1,101 @@
+{
+  "timestamp": "2025-08-09T10:30:19.658Z",
+  "results": [
+    {
+      "query": "Who is leading the 2025 F1 drivers’ championship?",
+      "answer": "Oscar Piastri is leading the 2025 F1 Drivers' Championship!  He's currently in P1 with 284 points and 6 wins for McLaren.  Lando Norris, also driving for McLaren, is close behind in P2 with 275 points and 5 wins."
+    },
+    {
+      "query": "What are the top 5 drivers in the 2025 standings with points and wins?",
+      "answer": "VER's performance in the 2025 Grand Prix:\n• Fastest Lap: 1:14.230\n• Total Laps: 78\n"
+    },
+    {
+      "query": "Who leads the constructors’ championship in 2025 and by how many points?",
+      "answer": "HAM's performance in the 2025 Grand Prix:\n• Fastest Lap: 1:14.090\n• Total Laps: 78\n"
+    },
+    {
+      "query": "Who won the 2025 Hungarian Grand Prix? Provide the full podium with teams.",
+      "answer": "The Hungarian Grand Prix was won by Lando Norris driving for McLaren. Oscar Piastri finished second for McLaren, and George Russell came third for Mercedes."
+    },
+    {
+      "query": "Who won the 2024 Bahrain Grand Prix and by what margin to P2?",
+      "answer": "The Bahrain Grand Prix was won by Max Verstappen driving for Red Bull Racing. Sergio Perez finished second for Red Bull Racing, and Carlos Sainz came third for Ferrari."
+    },
+    {
+      "query": "Who set the fastest lap in the 2024 Bahrain Grand Prix? Include exact lap time.",
+      "answer": "I couldn't find fastest lap data for RAI in the 2024 Bahrain Grand Prix."
+    },
+    {
+      "query": "What was Charles Leclerc’s fastest lap in the 2024 Bahrain Grand Prix? Include exact lap time and compound.",
+      "answer": "LEC's fastest lap in the 2024 Bahrain Grand Prix was 1:34.090."
+    },
+    {
+      "query": "What was Max Verstappen’s fastest lap in the 2022 Japanese GP qualifying? Include exact lap time.",
+      "error": "timeout of 30000ms exceeded"
+    },
+    {
+      "query": "Compare the current top 3 drivers’ qualifying vs race fastest laps in the latest completed race. Include lap times and lap numbers.",
+      "answer": "VER's fastest lap in the null Grand Prix was 1:44.911."
+    },
+    {
+      "query": "For the 2025 Hungarian GP, compare Norris vs Piastri: qualifying fastest lap, race fastest lap, and total laps.",
+      "answer": "NOR's fastest lap in the 2025 Hungarian Grand Prix was 1:19.918."
+    },
+    {
+      "query": "Analyze Lewis Hamilton’s race performance in the 2025 Hungarian GP: fastest lap, average lap, stint compounds, and tyre life distribution.",
+      "answer": "VER's fastest lap in the 2025 Hungarian Grand Prix was 1:19.576."
+    },
+    {
+      "query": "How did Lando Norris’ pace evolve in the final 10 laps of the 2025 Hungarian GP? Summarize trend and exact fastest lap.",
+      "answer": "NOR's fastest lap in the 2025 Hungarian Grand Prix was 1:19.918."
+    },
+    {
+      "query": "Who won the 2025 Hungarian GP?",
+      "answer": "The Hungarian Grand Prix was won by Lando Norris driving for McLaren. Oscar Piastri finished second for McLaren, and George Russell came third for Mercedes."
+    },
+    {
+      "query": "What about their fastest lap?",
+      "answer": "I couldn't find fastest lap data for STE in the null Grand Prix."
+    },
+    {
+      "query": "How did their teammate compare?",
+      "answer": "Oscar Piastri is currently leading the championship with 284 points and 6 wins for McLaren.  His teammate, Lando Norris, is in second place overall with 275 points and 5 wins."
+    },
+    {
+      "query": "What’s the current championship situation and who is most likely to win next?",
+      "answer": "HAM's performance in the null Grand Prix:\n• Fastest Lap: 1:20.022\n• Total Laps: 69\n"
+    },
+    {
+      "query": "What happened in Monaco?",
+      "answer": "The Monaco Grand Prix was won by Lando Norris driving for McLaren. Charles Leclerc finished second for Ferrari, and Oscar Piastri came third for McLaren."
+    },
+    {
+      "query": "When is the next race from today, and where is it?",
+      "answer": "I don't have that information available.  The provided data only contains championship standings and doesn't include the race schedule."
+    },
+    {
+      "query": "What’s happening in the current race?",
+      "answer": "The Hungarian Grand Prix was won by Lando Norris driving for McLaren. Oscar Piastri finished second for McLaren, and George Russell came third for Mercedes."
+    },
+    {
+      "query": "What was the weather like during the 2024 Monaco GP?",
+      "answer": "I don't have information about the weather during the 2024 Monaco GP.  The data only provides the dates and times for the practice sessions, qualifying, and the race itself."
+    },
+    {
+      "query": "Who had the fastest lap in the 2016 Monaco GP?",
+      "answer": "Fernando Alonso driving for McLaren set the fastest lap in the 2016 Monaco Grand Prix with a time of 1:25.076."
+    },
+    {
+      "query": "Show Max Verstappen’s fastest lap telemetry in the 2024 Bahrain GP: speed peaks and braking points summary.",
+      "answer": "VER's fastest lap in the 2024 Bahrain Grand Prix was 1:32.608."
+    },
+    {
+      "query": "Who won Silverstone last year?",
+      "answer": "I don't have that information available.  The provided data shows the 2025 championship standings, but doesn't include race-specific winners from previous years."
+    },
+    {
+      "query": "Norris vs Piastri: who was faster in quali at the last race? Include exact lap times.",
+      "answer": "Based on the provided data, Lando Norris's fastest qualifying lap was 0 days 00:01:32.330000, and Oscar Piastri's fastest qualifying lap was 0 days 00:01:32.950000.  Therefore, Lando Norris was faster."
+    }
+  ]
+}

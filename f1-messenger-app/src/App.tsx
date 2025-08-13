@@ -4,8 +4,7 @@ import InputArea from './components/InputArea';
 import ConnectionStatus from './components/ConnectionStatus';
 import type { Message } from './types';
 import { llmService } from './services/llmService';
-import { nlSynthesizer } from './services/nlSynthesizer';
-import { formatLapTime, formatPoints, getOrdinal } from './utils/format';
+
 import './App.css';
 
 
@@ -32,7 +31,7 @@ function App() {
   };
   
   // Intelligent response synthesis
-  const synthesizeResponse = async (userInput: string, toolResult: any, toolName: string, queryPlan?: any) => {
+  const synthesizeResponse = async (userInput: string, toolResult: any, toolName: string) => {
     const data = toolResult.data?.data || toolResult.data;
     
     // Use LLM service for intelligent response synthesis
@@ -211,7 +210,7 @@ ${connectionState !== 'ready'
                   console.log('✅ Performance analysis result:', performanceResult);
                   
                   // Combine championship data with performance data
-                  const championshipData = await synthesizeResponse(userInput, result, queryPlan.tool, queryPlan);
+                  const championshipData = await synthesizeResponse(userInput, result, queryPlan.tool);
                   
                   let performanceData = '';
                   if (performanceResult.status === 'success' && performanceResult.data?.status !== 'error') {
@@ -258,7 +257,7 @@ ${connectionState !== 'ready'
           responseContent += `❌ **Data Processing Error:** ${result.data.message}\n\n`;
           responseContent += `🔧 **Troubleshooting:** This might be due to data availability for the requested year. Try a different year or check the data source.\n`;
         } else {
-          responseContent += await synthesizeResponse(userInput, result, queryPlan.tool, queryPlan);
+          responseContent += await synthesizeResponse(userInput, result, queryPlan.tool);
         }
       } else {
         responseContent += `❌ **Error:** ${result.data?.message || 'Unknown error occurred'}\n`;

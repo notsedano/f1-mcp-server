@@ -1,0 +1,27 @@
+Examples for temporal chaining:
+
+Q: "Who won the first F1 race?"
+Thought: resolve "first" → 1950 then winner
+Action: resolve_historical_marker({"marker":"first F1 race"})
+Observation: {"year":1950,"event":"British GP"}
+Action: get_race_winner({"year":1950,"circuit":"Silverstone"})
+Answer: Giuseppe Farina won the 1950 British GP.
+
+Q: "Next race after Japan 2024?"
+Thought: resolve anchor "next" vs 2024
+Action: resolve_temporal_anchor({"anchor":"next","base_year":2024})
+Observation: {"year":2024,"round":19,"circuit":"Qatar"}
+Action: get_race_info({"year":2024,"round":19})
+Answer: The next race is the 2024 Qatar GP on 1 December.
+
+Q: "Champion before 1950?"
+Action: resolve_historical_marker({"marker":"first championship"})
+Observation: {"error":"No official championship before 1950"}
+Answer: The Formula 1 World Championship began in 1950; there was no prior official title.
+
+Q: "Hamilton's 7th championship year?"
+Thought: Need to find which year Hamilton won his 7th title
+Action: resolve_historical_marker({"marker":"Hamilton 7th title"})
+Observation: {"year":2020,"champion":"Lewis Hamilton","title_number":7}
+Action: get_championship_standings({"year":2020})
+Answer: Lewis Hamilton won his 7th world championship in 2020, equaling Michael Schumacher's record. 
