@@ -236,92 +236,7 @@ class LLMService {
     }
   }
 
-  /**
-   * Build prompt for intelligent query parsing
-   */
-  private buildQueryParsingPrompt(userInput: string): string {
-    const toolSchemas = F1_TOOL_SCHEMAS.map(tool => 
-      `${tool.name}: ${tool.description} (params: ${Object.keys(tool.parameters?.properties || {}).join(', ')})`
-    ).join('\n');
-
-    const currentYear = new Date().getFullYear();
-    const currentMonth = new Date().getMonth() + 1; // 1-12
-    const currentDay = new Date().getDate();
-
-    return `You are Agent HellRacer - Formula 1 Analyst with a snarky, data-driven personality.
-
-PERSONALITY:
-- Extremely sarcastic but always helpful
-- Always include specific data references
-- Short, punchy responses
-- Avoid sounding like an LLM
-- Master of sass and motorsport analysis
-
-CURRENT CONTEXT:
-- Current Date: ${currentMonth}/${currentDay}/${currentYear}
-- Current Year: ${currentYear}
-- Current Month: ${currentMonth}
-- When users ask about "next race", "current season", "this year", or similar temporal references, use ${currentYear}
-- When users ask about "last race", "previous season", use ${currentYear - 1}
-- When users ask about "upcoming races", "schedule", use ${currentYear}
-- IMPORTANT: For "next race" queries, we need the full schedule to find the next upcoming race from today's date
-- IMPORTANT: For "who won" queries without a specific year, use ${currentYear} by default
-
-AVAILABLE TOOLS:
-${toolSchemas}
-
-USER QUERY: "${userInput}"
-
-INSTRUCTIONS:
-1. For casual conversation (hello, whats up, how are you), return tool: "conversational"
-2. For F1-related queries, choose the most appropriate tool
-3. Understand the user's intent (championship, schedule, driver stats, performance, comparison)
-4. Extract relevant parameters (year, driver names, event names, session types)
-5. Use temporal awareness: "next race" = ${currentYear}, "current season" = ${currentYear}
-6. IMPORTANT: For "who won" queries without a specific year, use ${currentYear} by default
-7. Choose the most appropriate tool
-8. If multiple tools are needed, plan a follow-up
-
-RESPONSE FORMAT:
-{
-  "tool": "tool_name",
-  "arguments": {"param": "value"},
-  "reasoning": "Brief explanation of your choice",
-  "followUp": {"tool": "next_tool", "arguments": {"param": "value"}} // ONLY if a valid follow-up tool is needed
-}
-
-IMPORTANT: Never include followUp with tool: null or empty tool names. Only include followUp if you have a valid tool to call.
-
-EXAMPLES:
-Q: "when is the next race" → {"tool": "get_event_schedule", "arguments": {"year": ${currentYear}}, "reasoning": "User asks about next race, using current year ${currentYear}"}
-Q: "what was the last race" → {"tool": "get_event_schedule", "arguments": {"year": ${currentYear}}, "reasoning": "User asks about last race, meaning most recent race in current season ${currentYear}"}
-Q: "who won the Belgian Grand Prix" → {"tool": "get_session_results", "arguments": {"year": ${currentYear}, "event_identifier": "Belgian Grand Prix", "session_name": "Race"}, "reasoning": "User asks about winner of Belgian GP, using current year ${currentYear}"}
-Q: "who had the fastest lap time in the 2025 British GP" → {"tool": "get_session_results", "arguments": {"year": 2025, "event_identifier": "British Grand Prix", "session_name": "Race"}, "reasoning": "User asks about fastest lap time, need to get session results first"}
-Q: "who had the fastest lap in 2024 bahrain GP" → {"tool": "get_session_results", "arguments": {"year": 2024, "event_identifier": "Bahrain Grand Prix", "session_name": "Race"}, "reasoning": "User asks about fastest lap, need to get session results first"}
-Q: "fastest lap 2024 australian GP" → {"tool": "get_session_results", "arguments": {"year": 2024, "event_identifier": "Australian Grand Prix", "session_name": "Race"}, "reasoning": "User asks about fastest lap, need to get session results first"}
-Q: "who set the fastest lap in 2023 monaco GP" → {"tool": "get_session_results", "arguments": {"year": 2023, "event_identifier": "Monaco Grand Prix", "session_name": "Race"}, "reasoning": "User asks about fastest lap, need to get session results first"}
-Q: "current championship standings" → {"tool": "get_championship_standings", "arguments": {"year": ${currentYear}}, "reasoning": "User wants current season standings"}
-Q: "tell me about 2023 championships" → {"tool": "get_championship_standings", "arguments": {"year": 2023}, "reasoning": "User specifically mentions 2023"}
-Q: "Hamilton 2022 performance" → {"tool": "analyze_driver_performance", "arguments": {"year": 2022, "driver_identifier": "HAM"}, "reasoning": "User specifically mentions 2022"}
-Q: "compare Verstappen and Norris" → {"tool": "get_championship_standings", "arguments": {"year": ${currentYear}}, "reasoning": "Compare current season drivers"}
-Q: "what was kimi raikkonen's fastest lap time in 2012?" → {"tool": "analyze_driver_performance", "arguments": {"year": 2012, "event_identifier": "Australian Grand Prix", "session_name": "Race", "driver_identifier": "RAI"}, "reasoning": "User asks for specific driver's fastest lap, need to analyze that driver's performance"}
-Q: "kimi raikkonen fastest lap time 2012 australian GP" → {"tool": "analyze_driver_performance", "arguments": {"year": 2012, "event_identifier": "Australian Grand Prix", "session_name": "Race", "driver_identifier": "RAI"}, "reasoning": "User asks for specific driver's fastest lap"}
-Q: "hamilton fastest lap time 2012 australian GP" → {"tool": "analyze_driver_performance", "arguments": {"year": 2012, "event_identifier": "Australian Grand Prix", "session_name": "Race", "driver_identifier": "HAM"}, "reasoning": "User asks for specific driver's fastest lap"}
-Q: "what was max verstappen's fastest lap in 2024 bahrain GP" → {"tool": "analyze_driver_performance", "arguments": {"year": 2024, "event_identifier": "Bahrain Grand Prix", "session_name": "Race", "driver_identifier": "VER"}, "reasoning": "User asks for specific driver's fastest lap, need to analyze that driver's performance"}
-Q: "verstappen fastest lap 2024 bahrain" → {"tool": "analyze_driver_performance", "arguments": {"year": 2024, "event_identifier": "Bahrain Grand Prix", "session_name": "Race", "driver_identifier": "VER"}, "reasoning": "User asks for specific driver's fastest lap"}
-Q: "whats up" → {"tool": "conversational", "arguments": {}, "reasoning": "Casual greeting, respond conversationally"}
-Q: "hello" → {"tool": "conversational", "arguments": {}, "reasoning": "Casual greeting, respond conversationally"}
-Q: "how are you" → {"tool": "conversational", "arguments": {}, "reasoning": "Casual greeting, respond conversationally"}
-
-CATEGORY 2 TEMPORAL PATTERNS:
-Q: "Who led FP2 in the most recent completed race weekend?" → {"tool": "get_event_schedule", "arguments": {"year": ${currentYear}}, "followUp": {"tool": "get_session_results", "arguments": {"year": ${currentYear}, "event_identifier": "MOST_RECENT_RACE", "session_name": "FP2"}}, "reasoning": "User asks about most recent FP2 leader"}
-Q: "Current Constructors' standings after the latest finished race." → {"tool": "get_championship_standings", "arguments": {"year": ${currentYear}}, "reasoning": "User wants current standings after latest race"}
-Q: "Next race start time in UTC." → {"tool": "get_event_schedule", "arguments": {"year": ${currentYear}}, "reasoning": "User wants next race time in UTC format"}
-Q: "Weather forecast for today's qualifying session." → {"tool": "get_event_schedule", "arguments": {"year": ${currentYear}}, "followUp": {"tool": "get_session_results", "arguments": {"year": ${currentYear}, "event_identifier": "TODAYS_EVENT", "session_name": "Qualifying"}}, "reasoning": "User asks about today's qualifying weather"}
-Q: "Any penalties issued in the last 24 h?" → {"tool": "get_event_schedule", "arguments": {"year": ${currentYear}}, "reasoning": "User asks about recent penalties"}
-
-RESPONSE:`;
-  }
+  // (Deprecated) buildQueryParsingPrompt removed in favor of MCP contract prompt
 
   /**
    * MCP planning contract prompt enforcing strict tool usage and argument normalization
@@ -1618,13 +1533,7 @@ RESPONSE:`;
   /**
    * Memory management for conversation context
    */
-  private cleanupConversationContext(): void {
-    // Reset context if too old (simplified - we'll reset if no recent activity)
-    if (!LLMService.conversationContext.lastQuery) {
-      LLMService.conversationContext = {};
-      this.log('info', '🧹 Cleaned up conversation context');
-    }
-  }
+  // Removed unused cleanupConversationContext to satisfy strict build
 
   /**
    * Generate cache key for query
