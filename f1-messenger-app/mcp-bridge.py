@@ -86,8 +86,7 @@ class F1MCPBridge:
         """Call F1 data functions directly for reliability"""
         print(f"Calling F1 tool directly: {tool_name}")
         
-        # Import F1 data functions directly
-        sys.path.append('../src')
+        # Import F1 data functions directly from the installed package
         from f1_mcp_server.f1_data import (
             get_championship_standings,
             get_event_schedule,

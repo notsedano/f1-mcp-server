@@ -91,6 +91,15 @@ app.post('/api/chat', async (req, res) => {
 
     console.log('F1 Agent processing:', latestUserMessage.content);
 
+    // Short-circuit: handle small talk/basic conversation without tool calls
+    const smallTalk = /^(hi|hello|hey|sup|what'?s up|how are you)/i.test(latestUserMessage.content.trim());
+    if (smallTalk) {
+      const conversational = await llmService.generateConversationalResponse(latestUserMessage.content);
+      const response: ChatResponse = { message: { content: conversational } };
+      res.json(response);
+      return;
+    }
+
     // Use centralized temporal reasoning to determine query processing
     let queryPlan;
     if (TemporalReasoning.shouldUseIntelligentFallback(latestUserMessage.content)) {

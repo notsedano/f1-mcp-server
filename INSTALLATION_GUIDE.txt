@@ -1,0 +1,88 @@
+Formula One MCP Server - Installation & Run Guide (Windows)
+
+Tested
+- Windows 10/11 (PowerShell)
+- Python 3.10–3.13
+- Node.js 18+
+
+Layout (key)
+- src/f1_mcp_server/*  -> Python FastF1 tools
+- f1-messenger-app/*  -> React/Vite frontend, Agent (Express), Bridge (FastAPI)
+
+1) Python backend install (repo root)
+- pip install -e .
+- Verify: py -m f1_mcp_server --help
+- Optional run: py -m f1_mcp_server --transport sse --port 8001
+
+2) Frontend deps (repo root)
+- cd f1-messenger-app
+- npm install
+
+3) Gemini API key (.env)
+Create f1-messenger-app/.env with BOTH vars (browser + Node):
+VITE_GEMINI_API_KEY=YOUR_REAL_KEY
+GEMINI_API_KEY=YOUR_REAL_KEY
+
+4) Start MCP Bridge (port 3001)
+- Ensure bridge deps: pip install pyjwt fastapi uvicorn
+- From f1-messenger-app: python mcp-bridge.py
+- Health: http://127.0.0.1:3001/health -> 200
+
+5) Start Agent server (port 11435)
+- In f1-messenger-app: npm run start:agent
+- Health: http://localhost:11435/health -> llm_available: true
+
+6) Start frontend
+- In f1-messenger-app: npm run dev
+- Open http://localhost:5173/ (or printed port)
+
+Request flow
+Frontend -> Agent (/api/chat) -> Bridge (/mcp/tool) -> FastF1 tools
+- Frontend calls Agent first; falls back to Bridge only if Agent fails.
+
+Config knobs
+- Frontend agent URL: VITE_AGENT_URL (default http://localhost:11435)
+- Agent bridge URL: BRIDGE_URL (default http://127.0.0.1:3001)
+
+Quick health checks (PowerShell)
+- Invoke-WebRequest -Uri "http://localhost:11435/health" -Method GET
+- Invoke-WebRequest -Uri "http://127.0.0.1:3001/health" -Method GET
+
+Common commands
+- Kill Python: taskkill /f /im python.exe
+- Ports: netstat -ano | findstr :3001
+
+Troubleshooting (what we hit & fixes)
+1) LLM key not detected
+   - Cause: only VITE_* set. Fix: add both VITE_GEMINI_API_KEY and GEMINI_API_KEY in .env; restart Agent.
+2) ECONNREFUSED ::1:3001 from Agent to Bridge
+   - Cause: IPv6 loopback. Fix: use IPv4 127.0.0.1.
+   - Implemented: tool caller now targets http://127.0.0.1:3001 (overridable via BRIDGE_URL).
+3) PowerShell '&&' not valid
+   - Run commands on separate lines or use ';'.
+4) Missing bridge deps (jwt/FastAPI/Uvicorn)
+   - pip install pyjwt fastapi uvicorn
+5) Port in use (3001, 5173)
+   - Stop prior process (taskkill /f /im python.exe) or accept Vite’s new port.
+6) Frontend shows "I encountered an error retrieving the data"
+   - Ensure Agent health (llm_available: true) and Bridge /health 200.
+   - Reload page; check browser console + Agent logs.
+7) Agent calling tools for small talk
+   - Implemented: small‑talk short‑circuit in Agent; no tool calls for greetings.
+
+End-to-end check
+1) Bridge /health -> 200
+2) Agent /health -> 200 (llm_available: true)
+3) Frontend loads
+4) Ask: "Who won the 2023 championship?" -> data-backed answer
+5) Ask: "What is the 2025 schedule?" -> schedule list
+
+Env variables summary
+- VITE_GEMINI_API_KEY  (frontend)
+- GEMINI_API_KEY       (agent)
+- VITE_AGENT_URL       (optional override)
+- BRIDGE_URL           (optional override, default http://127.0.0.1:3001)
+
+Notes
+- After changing .env, restart Agent (npm run start:agent).
+- Agent performs LLM planning/synthesis; Bridge executes FastF1 tools.

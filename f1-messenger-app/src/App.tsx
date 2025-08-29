@@ -22,6 +22,8 @@ function App() {
   const [connectionState, setConnectionState] = useState<'connecting' | 'ready' | 'failed' | 'disconnected'>('disconnected');
   const [bridgeHealth, setBridgeHealth] = useState<any>(null);
   
+  // Prefer talking to the Agent server; fall back to bridge
+  const AGENT_URL = (import.meta as any).env?.VITE_AGENT_URL || 'http://localhost:11435';
   const BRIDGE_URL = 'http://localhost:3001';
   
   // Intelligent query parsing using LLM service
@@ -44,7 +46,11 @@ function App() {
       setConnectionState('connecting');
       
       try {
-        const response = await fetch(`${BRIDGE_URL}/health`);
+        // Check agent first, then bridge
+        let response = await fetch(`${AGENT_URL}/health`).catch(() => undefined as any);
+        if (!response || !response.ok) {
+          response = await fetch(`${BRIDGE_URL}/health`);
+        }
         if (response.ok) {
           const health = await response.json();
           setBridgeHealth(health);
@@ -127,28 +133,47 @@ ${connectionState !== 'ready'
       
       console.log('🧠 Starting intelligent query processing...');
       
-      // Parse user query to determine tool and arguments using LLM
-      const queryPlan = await parseQuery(userInput);
-      console.log('📋 Query plan:', JSON.stringify(queryPlan, null, 2));
-      
-      // Call the appropriate tool
-      const response = await fetch(`${BRIDGE_URL}/mcp/tool`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          name: queryPlan.tool,
-          arguments: queryPlan.arguments
-        })
-      });
-      
-      if (!response.ok) {
-        throw new Error(`Bridge request failed: ${response.status}`);
+      // Try Agent server first (LLM + tools on the backend)
+      try {
+        const agentResp = await fetch(`${AGENT_URL}/api/chat`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            model: 'f1-agent',
+            messages: [{ role: 'user', content: userInput }],
+            stream: false
+          })
+        });
+        if (agentResp.ok) {
+          const agentJson = await agentResp.json();
+          const processingTime = performance.now() - startTime;
+          const content = agentJson?.message?.content || 'No response content.';
+          const assistantMessage: Message = {
+            id: (Date.now() + 1).toString(),
+            role: 'assistant',
+            content: `${content}\n\n*Query processed in ${processingTime.toFixed(1)}ms*`,
+            timestamp: new Date()
+          };
+          setMessages(prev => [...prev, assistantMessage]);
+          setIsProcessing(false);
+          return;
+        }
+        console.warn('Agent request failed, status:', agentResp.status);
+      } catch (e) {
+        console.warn('Agent request error, falling back to bridge:', e);
       }
       
+      // Fallback: local LLM planning + bridge tool call
+      const queryPlan = await parseQuery(userInput);
+      console.log('📋 Query plan (fallback to bridge):', JSON.stringify(queryPlan, null, 2));
+      const response = await fetch(`${BRIDGE_URL}/mcp/tool`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: queryPlan.tool, arguments: queryPlan.arguments })
+      });
+      if (!response.ok) throw new Error(`Bridge request failed: ${response.status}`);
       const result = await response.json();
-      console.log('✅ Bridge response received:', result);
+      console.log('✅ Bridge response received (fallback path):', result);
       
       // Check if we need to make a follow-up call (recursive tool calling)
       if (result.status === 'success' && result.data && queryPlan.followUp) {

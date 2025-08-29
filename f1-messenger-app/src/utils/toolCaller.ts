@@ -7,6 +7,9 @@
  */
 import { normalizeDriverIdentifier } from '../services/driverMapping';
 
+// Prefer IPv4 loopback to avoid ::1 binding issues; allow override
+const BRIDGE_URL = (process.env.BRIDGE_URL || 'http://127.0.0.1:3001').replace(/\/$/, '');
+
 export async function callF1ToolsRecursive(queryPlan: any, depth: number = 0): Promise<any> {
   const MAX_DEPTH = 3;
   if (depth >= MAX_DEPTH) {
@@ -36,7 +39,7 @@ export async function callF1ToolsRecursive(queryPlan: any, depth: number = 0): P
     const requestBody = { name: queryPlan.tool, arguments: normalizedArgs };
     console.log(`📤 [Depth ${depth}] Sending request to bridge:`, JSON.stringify(requestBody, null, 2));
     
-    const response = await fetch('http://localhost:3001/mcp/tool', {
+    const response = await fetch(`${BRIDGE_URL}/mcp/tool`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(requestBody)
@@ -102,7 +105,7 @@ export async function callF1ToolsRecursive(queryPlan: any, depth: number = 0): P
           // Fetch schedule to resolve last completed event
           const scheduleReq = { name: 'get_event_schedule', arguments: { year: followUpPlan.arguments.year } };
           console.log(`📤 [Depth ${depth}] Resolving last event for compare via schedule`);
-          const scheduleResp = await fetch('http://localhost:3001/mcp/tool', {
+          const scheduleResp = await fetch(`${BRIDGE_URL}/mcp/tool`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(scheduleReq)
@@ -120,7 +123,7 @@ export async function callF1ToolsRecursive(queryPlan: any, depth: number = 0): P
         // Final fallback: if we still lack drivers, derive top 3 codes from last race results
         if (!followUpPlan.arguments.drivers) {
           const scheduleReq2 = { name: 'get_event_schedule', arguments: { year: followUpPlan.arguments.year } };
-          const schedResp2 = await fetch('http://localhost:3001/mcp/tool', {
+          const schedResp2 = await fetch(`${BRIDGE_URL}/mcp/tool`, {
             method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(scheduleReq2)
           });
           if (schedResp2.ok) {
@@ -129,7 +132,7 @@ export async function callF1ToolsRecursive(queryPlan: any, depth: number = 0): P
             const lastRace2 = extractLastRaceFromSchedule(schedInner2);
             if (lastRace2) {
               const resReq = { name: 'get_session_results', arguments: { year: followUpPlan.arguments.year, event_identifier: lastRace2, session_name: 'Race' } };
-              const resResp = await fetch('http://localhost:3001/mcp/tool', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(resReq) });
+              const resResp = await fetch(`${BRIDGE_URL}/mcp/tool`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(resReq) });
               if (resResp.ok) {
                 const resJson = await resResp.json();
                 const resData = resJson?.data?.data ?? resJson?.data;
