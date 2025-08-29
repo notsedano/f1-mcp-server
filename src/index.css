@@ -1,0 +1,109 @@
+/* Import iOS-specific fixes */
+@import './styles/ios-fixes.css';
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Set Chakra Petch as default font */
+@layer base {
+  html {
+    font-family: 'Chakra Petch', system-ui, sans-serif !important;
+  }
+  
+  body {
+    font-family: 'Chakra Petch', system-ui, sans-serif !important;
+  }
+  
+  button, input, select, textarea, div, p, h1, h2, h3, h4, h5, h6, span {
+    font-family: 'Chakra Petch', system-ui, sans-serif !important;
+  }
+  
+  /* Ensure consistent font-weight */
+  .font-bold, .font-semibold, .font-medium {
+    font-family: 'Chakra Petch', system-ui, sans-serif !important;
+  }
+}
+
+@layer utilities {
+  /* Custom scrollbar styling */
+  .custom-scrollbar::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  
+  .custom-scrollbar::-webkit-scrollbar-track {
+    background: rgba(0, 0, 0, 0.3);
+  }
+  
+  .custom-scrollbar::-webkit-scrollbar-thumb {
+    background: rgba(0, 107, 196, 0.6);
+    border-radius: 0;
+  }
+  
+  .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+    background: rgba(0, 164, 255, 0.8);
+  }
+  
+  /* Firefox scrollbar */
+  .custom-scrollbar {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(0, 107, 196, 0.6) rgba(0, 0, 0, 0.3);
+  }
+}
+
+/* DareDevil bot shadow effect */
+.shadow-glow-red {
+  box-shadow: 0 0 15px rgba(239, 68, 68, 0.3);
+  transition: box-shadow 0.3s ease;
+}
+
+.shadow-glow-red:hover {
+  box-shadow: 0 0 20px rgba(239, 68, 68, 0.5);
+}
+
+/* Yellow glow effect */
+.shadow-yellow-glow {
+  box-shadow: 0 0 10px rgba(250, 204, 21, 0.4);
+  transition: box-shadow 0.3s ease;
+}
+
+.hover\:shadow-yellow:hover {
+  box-shadow: 0 0 20px rgba(250, 204, 21, 0.7);
+}
+
+/* Subtle pulse animation */
+@keyframes pulse-subtle {
+  0%, 100% {
+    box-shadow: 0 0 10px rgba(250, 204, 21, 0.4);
+  }
+  50% {
+    box-shadow: 0 0 15px rgba(250, 204, 21, 0.6);
+  }
+}
+
+.animate-pulse-subtle {
+  animation: pulse-subtle 2s infinite;
+}
+
+/* Spacing utilities for consistent layout */
+.consistent-spacing {
+  margin-bottom: 1rem;
+}
+
+/* Fix for potential element overlapping */
+.prevent-overlap {
+  position: relative;
+  z-index: 1;
+}
+
+/* Consistent padding for cards and containers */
+.card-padding {
+  padding: 1rem;
+}
+
+@media (min-width: 640px) {
+  .card-padding {
+    padding: 1.5rem;
+  }
+}

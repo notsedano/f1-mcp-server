@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Supabase Connection Test</title>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <style>
+        body {
+            font-family: 'Chakra Petch', sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        h1 {
+            color: #3b82f6;
+        }
+        .card {
+            background-color: white;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+        button {
+            background-color: #3b82f6;
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        button:hover {
+            background-color: #2563eb;
+        }
+        .log {
+            background-color: #1e293b;
+            color: #e2e8f0;
+            padding: 15px;
+            border-radius: 4px;
+            margin-top: 15px;
+            font-family: 'Chakra Petch', monospace;
+            white-space: pre-wrap;
+            overflow-x: auto;
+        }
+        .error {
+            color: #ef4444;
+        }
+        .success {
+            color: #10b981;
+        }
+        input {
+            width: 100%;
+            padding: 8px;
+            margin-bottom: 10px;
+            border: 1px solid #d1d5db;
+            border-radius: 4px;
+        }
+        label {
+            font-weight: bold;
+            display: block;
+            margin-bottom: 5px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Supabase Connection Test</h1>
+    
+    <div class="card">
+        <h2>Configuration</h2>
+        <div>
+            <label for="supabaseUrl">Supabase URL:</label>
+            <input type="text" id="supabaseUrl" value="https://qiasnpjpkhretlyymgh.supabase.co">
+        </div>
+        <div>
+            <label for="supabaseKey">Supabase Anon Key:</label>
+            <input type="text" id="supabaseKey" placeholder="Enter your Supabase anon key">
+        </div>
+        <button onclick="initializeSupabase()">Initialize Client</button>
+    </div>
+    
+    <div class="card">
+        <h2>Test Connection</h2>
+        <button onclick="testBasicConnection()">Test Connection (Ping)</button>
+        <button onclick="testAuthConnection()">Test Auth Connection</button>
+        <button onclick="testDatabaseConnection()">Test Database Connection</button>
+        <div id="connectionLog" class="log"></div>
+    </div>
+    
+    <div class="card">
+        <h2>Authentication Test</h2>
+        <div>
+            <label for="email">Email:</label>
+            <input type="email" id="email" placeholder="test@example.com">
+        </div>
+        <div>
+            <label for="password">Password:</label>
+            <input type="password" id="password" placeholder="password">
+        </div>
+        <button onclick="testSignUp()">Sign Up</button>
+        <button onclick="testSignIn()">Sign In</button>
+        <div id="authLog" class="log"></div>
+    </div>
+
+    <script>
+        let supabaseClient = null;
+
+        function log(element, message, isError = false) {
+            const logElement = document.getElementById(element);
+            const className = isError ? 'error' : 'success';
+            const timestamp = new Date().toISOString().split('T')[1].slice(0, 8);
+            logElement.innerHTML += `<div class="${className}">[${timestamp}] ${message}</div>`;
+        }
+
+        function initializeSupabase() {
+            try {
+                const supabaseUrl = document.getElementById('supabaseUrl').value;
+                const supabaseKey = document.getElementById('supabaseKey').value;
+                
+                if (!supabaseUrl || !supabaseKey) {
+                    log('connectionLog', 'ERROR: Please provide both Supabase URL and Anon Key', true);
+                    return;
+                }
+
+                supabaseClient = supabase.createClient(supabaseUrl, supabaseKey);
+                log('connectionLog', 'Supabase client initialized successfully');
+            } catch (error) {
+                log('connectionLog', `ERROR initializing Supabase: ${error.message}`, true);
+            }
+        }
+
+        async function testBasicConnection() {
+            if (!supabaseClient) {
+                log('connectionLog', 'ERROR: Please initialize the Supabase client first', true);
+                return;
+            }
+
+            try {
+                log('connectionLog', 'Testing basic connection to Supabase...');
+                
+                // Perform a simple health check
+                const start = Date.now();
+                const response = await fetch(document.getElementById('supabaseUrl').value);
+                const elapsed = Date.now() - start;
+                
+                if (response.ok) {
+                    log('connectionLog', `Connection successful! Response time: ${elapsed}ms`);
+                } else {
+                    log('connectionLog', `ERROR: Received status ${response.status} from Supabase`, true);
+                }
+            } catch (error) {
+                log('connectionLog', `ERROR: Connection failed: ${error.message}`, true);
+            }
+        }
+
+        async function testAuthConnection() {
+            if (!supabaseClient) {
+                log('connectionLog', 'ERROR: Please initialize the Supabase client first', true);
+                return;
+            }
+
+            try {
+                log('connectionLog', 'Testing connection to Supabase Auth API...');
+                
+                const { data, error } = await supabaseClient.auth.getSession();
+                
+                if (error) {
+                    log('connectionLog', `ERROR with Auth API: ${error.message}`, true);
+                } else {
+                    log('connectionLog', 'Auth API connection successful!');
+                    log('connectionLog', `Session: ${data.session ? 'Active' : 'None'}`);
+                }
+            } catch (error) {
+                log('connectionLog', `ERROR: Auth connection failed: ${error.message}`, true);
+            }
+        }
+
+        async function testDatabaseConnection() {
+            if (!supabaseClient) {
+                log('connectionLog', 'ERROR: Please initialize the Supabase client first', true);
+                return;
+            }
+
+            try {
+                log('connectionLog', 'Testing connection to Supabase Database...');
+                
+                // Try to query a table that likely doesn't exist - we expect a specific error code
+                const { data, error } = await supabaseClient
+                    .from('test_connection')
+                    .select('*')
+                    .limit(1);
+                
+                if (error && error.code === 'PGRST116') {
+                    // This is the expected error when the table doesn't exist
+                    log('connectionLog', 'Database connection successful! (Table not found as expected)');
+                } else if (error) {
+                    log('connectionLog', `ERROR with Database API: ${error.message}`, true);
+                } else {
+                    log('connectionLog', 'Database connection successful!');
+                    log('connectionLog', `Retrieved ${data.length} rows`);
+                }
+            } catch (error) {
+                log('connectionLog', `ERROR: Database connection failed: ${error.message}`, true);
+            }
+        }
+
+        async function testSignUp() {
+            if (!supabaseClient) {
+                log('authLog', 'ERROR: Please initialize the Supabase client first', true);
+                return;
+            }
+
+            const email = document.getElementById('email').value;
+            const password = document.getElementById('password').value;
+
+            if (!email || !password) {
+                log('authLog', 'ERROR: Please provide both email and password', true);
+                return;
+            }
+
+            try {
+                log('authLog', `Attempting to sign up with email: ${email}...`);
+                
+                const { data, error } = await supabaseClient.auth.signUp({
+                    email,
+                    password
+                });
+                
+                if (error) {
+                    log('authLog', `ERROR: Sign up failed: ${error.message}`, true);
+                } else {
+                    log('authLog', 'Sign up successful!');
+                    log('authLog', `User ID: ${data.user?.id || 'None'}`);
+                    log('authLog', `Email confirmed: ${!data.user?.email_confirmed_at ? 'No' : 'Yes'}`);
+                }
+            } catch (error) {
+                log('authLog', `ERROR: Sign up exception: ${error.message}`, true);
+            }
+        }
+
+        async function testSignIn() {
+            if (!supabaseClient) {
+                log('authLog', 'ERROR: Please initialize the Supabase client first', true);
+                return;
+            }
+
+            const email = document.getElementById('email').value;
+            const password = document.getElementById('password').value;
+
+            if (!email || !password) {
+                log('authLog', 'ERROR: Please provide both email and password', true);
+                return;
+            }
+
+            try {
+                log('authLog', `Attempting to sign in with email: ${email}...`);
+                
+                const { data, error } = await supabaseClient.auth.signInWithPassword({
+                    email,
+                    password
+                });
+                
+                if (error) {
+                    log('authLog', `ERROR: Sign in failed: ${error.message}`, true);
+                } else {
+                    log('authLog', 'Sign in successful!');
+                    log('authLog', `User ID: ${data.user?.id || 'None'}`);
+                    log('authLog', `Session expires at: ${new Date(data.session?.expires_at * 1000).toLocaleString()}`);
+                }
+            } catch (error) {
+                log('authLog', `ERROR: Sign in exception: ${error.message}`, true);
+            }
+        }
+    </script>
+</body>
+</html> 

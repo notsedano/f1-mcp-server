@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NBA Betting System - Loading</title>
+  <style>
+    body {
+      font-family: 'Chakra Petch', monospace;
+      background-color: #0b0e14;
+      color: #d8e0e9;
+      margin: 0;
+      padding: 0;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      text-align: center;
+    }
+    .container {
+      max-width: 600px;
+      padding: 2rem;
+      border: 1px solid #1e2a4a;
+      background-color: rgba(17, 24, 39, 0.8);
+      box-shadow: 0 0 15px rgba(28, 126, 214, 0.3);
+    }
+    h1 {
+      color: #38bdf8;
+      margin-bottom: 1.5rem;
+      text-transform: uppercase;
+      letter-spacing: 2px;
+    }
+    .loader {
+      display: inline-block;
+      width: 50px;
+      height: 50px;
+      border: 3px solid rgba(56, 189, 248, 0.3);
+      border-radius: 50%;
+      border-top-color: #38bdf8;
+      animation: spin 1s ease-in-out infinite;
+      margin-bottom: 1.5rem;
+    }
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+    .status {
+      font-size: 0.9rem;
+      margin-top: 1rem;
+      color: #9ca3af;
+    }
+    .terminal {
+      background-color: rgba(0, 0, 0, 0.5);
+      border: 1px solid #1e293b;
+      padding: 1rem;
+      border-radius: 4px;
+      text-align: left;
+      margin-top: 1.5rem;
+      font-size: 0.9rem;
+      color: #d1d5db;
+      overflow-x: auto;
+    }
+    .system {
+      color: #38bdf8;
+    }
+    .warning {
+      color: #fbbf24;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>NBA Betting System</h1>
+    <div class="loader"></div>
+    <p>INITIALIZING APPLICATION</p>
+    <div class="status">STATUS: LOADING ENVIRONMENT</div>
+    
+    <div class="terminal">
+      <div class="system">> SYSTEM_LOADING</div>
+      <div class="system">> INITIALIZING_RUNTIME</div>
+      <div class="warning">> CONNECTING_TO_SERVICES</div>
+      <div>> REDIRECTING_TO_APPLICATION...</div>
+    </div>
+    
+    <script>
+      // Attempt to redirect to the main application after a delay
+      setTimeout(() => {
+        window.location.href = '/';
+      }, 3000);
+    </script>
+  </div>
+</body>
+</html> 

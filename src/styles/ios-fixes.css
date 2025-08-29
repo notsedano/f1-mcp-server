@@ -1,0 +1,54 @@
+/* iOS-specific fixes for better scrolling behavior */
+
+/* Enable smooth scrolling on iOS */
+* {
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Fix for iOS Safari viewport height issues */
+.h-full {
+  height: 100vh;
+  height: -webkit-fill-available;
+}
+
+.max-h-\[90vh\] {
+  max-height: 90vh;
+  max-height: -webkit-fill-available;
+}
+
+/* Prevent iOS bounce effect on fixed elements */
+.fixed {
+  -webkit-transform: translateZ(0);
+  transform: translateZ(0);
+}
+
+/* Ensure proper touch handling */
+.overflow-y-auto {
+  -webkit-overflow-scrolling: touch;
+  overflow-y: auto;
+}
+
+/* Fix for iOS input zoom */
+input[type="text"],
+input[type="number"],
+textarea,
+select {
+  font-size: 16px !important;
+}
+
+/* Prevent iOS from zooming on form inputs */
+@media screen and (max-width: 768px) {
+  input[type="text"],
+  input[type="number"],
+  textarea,
+  select {
+    font-size: 16px !important;
+  }
+}
+
+/* Fix for iOS modal scrolling */
+body.modal-open {
+  position: fixed;
+  width: 100%;
+  overflow: hidden;
+} 
