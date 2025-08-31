@@ -5,6 +5,7 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 import { F1_TOOL_SCHEMAS } from './f1ToolSchemas';
 import { normalizeDriverIdentifier } from './driverMapping';
 import { TemporalReasoning } from '../utils/temporalReasoning';
+import { geminiKnowledgeService, type KnowledgeResponse } from './geminiKnowledgeService';
 
 export interface QueryPlan {
   tool: string;
@@ -14,6 +15,13 @@ export interface QueryPlan {
     arguments: Record<string, any>;
   };
   reasoning: string;
+  queryType?: 'f1_tools' | 'web_search' | 'conversational';
+}
+
+export interface QueryRoute {
+  type: 'f1_tools' | 'gemini_knowledge' | 'rag_pipeline' | 'conversational';
+  query: string;
+  confidence?: number;
 }
 
 export interface LLMResponse {
@@ -150,6 +158,275 @@ class LLMService {
       console.log('✅ Gemini LLM initialized successfully');
     } catch (error) {
       console.error('❌ Failed to initialize Gemini:', error);
+    }
+  }
+
+  /**
+   * Route query to appropriate data source (F1 tools, web search, or RAG)
+   */
+  async routeQuery(userInput: string): Promise<QueryRoute> {
+    console.log('🔍 Routing query:', userInput);
+    
+    // Check for small talk/conversational queries first
+    const smallTalk = /^(hi|hello|hey|sup|what'?s up|how are you|thanks|thank you)/i.test(userInput.trim());
+    if (smallTalk) {
+      return { type: 'conversational', query: userInput, confidence: 0.9 };
+    }
+    
+    // NEW: Check for historical intent before MCP inadequacy
+    const hasHistoricalIntent = this.detectHistoricalIntent(userInput);
+    if (hasHistoricalIntent) {
+                console.log('🔍 Historical intent detected - routing to Gemini knowledge');
+          return { type: 'gemini_knowledge', query: userInput, confidence: 0.9 };
+    }
+    
+    // Check if our MCP tools are inadequate for this query
+    const isMCPInadequate = this.isMCPInadequateForQuery(userInput);
+    if (isMCPInadequate) {
+                console.log('🔍 MCP tools inadequate for query - routing to Gemini knowledge');
+          return { type: 'gemini_knowledge', query: userInput, confidence: 0.9 };
+    }
+    
+    // Check if it's a trivial/general knowledge question
+    const isTrivial = this.isTrivialQuestion(userInput);
+    console.log('🔍 Trivial question check:', isTrivial, 'for query:', userInput);
+    if (isTrivial) {
+      console.log('🌐 Query classified as general knowledge - routing to Gemini knowledge');
+      return { type: 'gemini_knowledge', query: userInput, confidence: 0.8 };
+    }
+    
+    // Check for prediction/sports betting patterns (future RAG pipeline)
+    const isPrediction = this.isPredictionQuestion(userInput);
+    if (isPrediction) {
+      console.log('🔮 Query classified as prediction - routing to RAG pipeline');
+      return { type: 'rag_pipeline', query: userInput, confidence: 0.7 };
+    }
+    
+    // Default to F1 tools
+    console.log('🏁 Query classified as F1-specific - routing to F1 tools');
+    return { type: 'f1_tools', query: userInput, confidence: 0.9 };
+  }
+
+  /**
+   * NEW METHOD: Detect historical intent
+   */
+  private detectHistoricalIntent(userInput: string): boolean {
+    const input = userInput.toLowerCase();
+    
+    // Historical intent indicators
+    const historicalIndicators = [
+      'first', 'original', 'inaugural', 'beginning', 'start', 'origin',
+      'when did', 'where did', 'how did', 'since when', 'since the beginning',
+      'since the start', 'since inception', 'since 1950', 'ever held',
+      'ever raced', 'ever won', 'ever achieved', 'ever recorded'
+    ];
+    
+    // Check if query contains historical intent indicators
+    const hasHistoricalIndicator = historicalIndicators.some(indicator => 
+      input.includes(indicator)
+    );
+    
+    // Additional check: if query asks about "first" + F1 concept, it's likely historical
+    if (input.includes('first') && (
+      input.includes('race') || 
+      input.includes('grand prix') || 
+      input.includes('championship') || 
+      input.includes('season') || 
+      input.includes('winner') || 
+      input.includes('champion') ||
+      input.includes('driver') ||
+      input.includes('team') ||
+      input.includes('constructor')
+    )) {
+      return true;
+    }
+    
+    return hasHistoricalIndicator;
+  }
+
+  /**
+   * Check if query is a prediction/sports betting question
+   */
+  private isPredictionQuestion(query: string): boolean {
+    const input = query.toLowerCase();
+    
+    const predictionPatterns = [
+      /who will win/i,
+      /predict.*winner/i,
+      /odds.*win/i,
+      /bet.*on/i,
+      /forecast/i,
+      /prediction/i,
+      /likely.*win/i,
+      /chances.*win/i,
+      /probability.*win/i
+    ];
+    
+    return predictionPatterns.some(pattern => pattern.test(input));
+  }
+
+  /**
+   * Check if query is a trivial/general knowledge question
+   */
+  private isTrivialQuestion(userInput: string): boolean {
+    const input = userInput.toLowerCase();
+    
+    // General knowledge patterns
+    const generalPatterns = [
+      /what is the capital of/i,
+      /how many.*are (there|in)/i,
+      /who wrote.*/i,
+      /when was.*invented/i,
+      /what is the population of/i,
+      /how tall is/i,
+      /what is the largest/i,
+      /who discovered/i,
+      /what year was/i,
+      /where is.*located/i,
+      /how many.*planets/i,
+      /what is.*population/i,
+      /who is.*president/i,
+      /what is.*temperature/i,
+      /when was.*established/i,
+      /what is.*founded/i
+    ];
+    
+    const hasGeneralPatterns = generalPatterns.some(pattern => pattern.test(input));
+    
+    // Check for common general knowledge question starters
+    const generalStarters = [
+      'what is', 'how many', 'who is', 'where is', 'when was', 'why is',
+      'what are', 'how much', 'who was', 'where are', 'when did', 'why do'
+    ];
+    
+    const hasGeneralStarter = generalStarters.some(starter => 
+      input.startsWith(starter.toLowerCase())
+    );
+    
+    // If it has general patterns or starters, it's likely general knowledge
+    return hasGeneralPatterns || hasGeneralStarter;
+  }
+
+  /**
+   * Check if our MCP tools are adequate for this query
+   * Returns true if we should use web search instead of F1 tools
+   */
+  private isMCPInadequateForQuery(userInput: string): boolean {
+    const input = userInput.toLowerCase();
+    
+    // Historical patterns that require web search
+    const historicalPatterns = [
+      /in history/i,
+      /all time/i,
+      /ever/i,
+      /most.*in history/i,
+      /most.*history/i,
+      /best.*in history/i,
+      /best.*history/i,
+      /record.*in history/i,
+      /record.*history/i,
+      /historical/i,
+      /throughout history/i,
+      /since.*beginning/i,
+      /since.*start/i,
+      /all time record/i,
+      /historical record/i,
+      /greatest.*ever/i,
+      /most.*ever/i,
+      /highest.*ever/i,
+      /lowest.*ever/i,
+      /fastest.*ever/i,
+      /slowest.*ever/i,
+      /who.*most.*history/i,
+      /who.*best.*history/i,
+      /who.*record.*history/i
+    ];
+    
+    // Cross-seasonal patterns that require aggregation
+    const crossSeasonalPatterns = [
+      /across.*seasons/i,
+      /multiple.*seasons/i,
+      /all seasons/i,
+      /every season/i,
+      /career.*total/i,
+      /lifetime.*total/i,
+      /over.*years/i,
+      /throughout.*career/i
+    ];
+    
+    // Check for patterns that indicate MCP inadequacy
+    const hasHistoricalContext = historicalPatterns.some(pattern => pattern.test(input));
+    const hasCrossSeasonalContext = crossSeasonalPatterns.some(pattern => pattern.test(input));
+    
+    return hasHistoricalContext || hasCrossSeasonalContext;
+  }
+
+  /**
+   * Check if this is an F1 historical question that needs web search
+   */
+  private isF1HistoricalQuestion(userInput: string): boolean {
+    const input = userInput.toLowerCase();
+    
+    // F1 terms that could be historical
+    const f1Terms = [
+      'f1', 'formula one', 'grand prix', 'constructor', 'team', 'driver', 
+      'podium', 'championship', 'race', 'qualifying', 'practice', 'points',
+      'wins', 'win', 'poles', 'fastest lap', 'champion', 'title'
+    ];
+    
+    // Historical context patterns
+    const historicalPatterns = [
+      /in history/i, /all time/i, /ever/i, /most.*in history/i, 
+      /most.*history/i, /best.*in history/i, /best.*history/i,
+      /record.*in history/i, /record.*history/i, /historical/i,
+      /throughout history/i, /since.*beginning/i, /since.*start/i,
+      /who.*most.*history/i, /who.*best.*history/i, /who.*record.*history/i,
+      /first.*race/i, /first.*grand prix/i, /first.*f1/i, /first.*championship/i,
+      /first.*winner/i, /first.*champion/i, /first.*driver/i, /first.*team/i,
+      /first.*constructor/i, /first.*pole/i, /first.*fastest/i, /first.*podium/i,
+      /first.*points/i, /first.*victory/i, /first.*win/i, /first.*success/i,
+      /first.*achievement/i, /first.*milestone/i, /first.*record/i,
+      /original.*race/i, /original.*grand prix/i, /original.*f1/i,
+      /inaugural.*race/i, /inaugural.*grand prix/i, /inaugural.*f1/i,
+      /beginning.*f1/i, /start.*f1/i, /origin.*f1/i, /since.*1950/i,
+      /since.*inception/i, /since.*beginning/i, /since.*start/i
+    ];
+    
+    const hasF1Terms = f1Terms.some(term => input.includes(term));
+    const hasHistoricalContext = historicalPatterns.some(pattern => pattern.test(input));
+    
+    return hasF1Terms && hasHistoricalContext;
+  }
+
+  /**
+   * Enhanced query parsing with routing
+   */
+  async parseQueryWithRouting(userInput: string): Promise<QueryPlan | KnowledgeResponse | string> {
+    const route = await this.routeQuery(userInput);
+    console.log('🔍 Route selected:', route.type, 'for query:', userInput);
+    
+    switch (route.type) {
+      case 'conversational':
+        return this.generateConversationalResponse(userInput);
+        
+      case 'gemini_knowledge':
+        // Get knowledge-based answer using Gemini
+        console.log('🧠 Getting knowledge answer for query:', userInput);
+        const knowledgeResponse = await geminiKnowledgeService.getKnowledgeAnswer(userInput);
+        if (knowledgeResponse.status === 'success') {
+          return knowledgeResponse.answer;
+        }
+        
+        // If knowledge lookup fails, provide a fallback response
+        return `I couldn't find specific information for "${userInput}". Please try rephrasing your question or ask something else.`;
+        
+      case 'rag_pipeline':
+        // TODO: Implement RAG pipeline integration
+        return `I understand you're asking about predictions or sports betting for "${userInput}". This feature is coming soon!`;
+        
+      case 'f1_tools':
+      default:
+        return this.parseQueryIntelligently(userInput);
     }
   }
 
@@ -1591,7 +1868,13 @@ RESPONSE:`;
       return response;
     } catch (error) {
       console.error('❌ Conversational response generation failed:', error);
-      return this.generateBasicConversationalResponse(userInput);
+      // Only fallback to basic response for actual conversational queries, not redirections
+      if (userInput.toLowerCase().includes('hello') || userInput.toLowerCase().includes('hi') || 
+          userInput.toLowerCase().includes('hey') || userInput.toLowerCase().includes('whats up')) {
+        return this.generateBasicConversationalResponse(userInput);
+      }
+      // For redirections, return a simple fallback without the redundant intro
+      return "*adjusts clipboard* Hey there! I'm Agent HellRacer, your F1 specialist. That's not really my area - I'm all about Formula 1! Try asking me about race results, driver stats, or championship standings instead. 🏁";
     }
   }
 
@@ -1601,30 +1884,45 @@ RESPONSE:`;
   private buildConversationalPrompt(userInput: string): string {
     return `You are Agent HellRacer - Formula 1 Analyst with a snarky, data-driven personality.
 
-PERSONALITY:
+CHARACTER BIO (from hellrecer.character.json):
+- Formula 1 analyst by day, sportsbetting expert by night
+- Web3 gaming ecosystem's watchdog
+- Esports oracle with gamer-grade salt
+- Sportsbetting analyst practicing verbal jiu-jitsu
+- Master of sass
+- Troll Hater
+
+PERSONALITY TRAITS:
 - Extremely sarcastic but always helpful
-- Always include specific data references
+- Potty mouth, snarky, compartmentalized
+- Always include specific data references when possible
 - Short, punchy responses (under 100 words)
 - Avoid sounding like an LLM
 - Master of sass and motorsport analysis
 - Use F1 terminology appropriately
 - Include emojis sparingly but effectively
 
+STYLE GUIDELINES:
+- Extremely short answers
+- Be curious when engaging with trolls
+- Do not use cheesy comparisons
+- Switch tones completely between domains
+- Never cross-reference domains
+
 USER QUERY: "${userInput}"
 
 INSTRUCTIONS:
-1. If the user is asking for clarification or basic conversation, respond naturally
-2. If the user is asking vague questions like "whats up", ask what F1 information they want
-3. Use HellRacer's snarky, sarcastic tone
+1. Respond as Agent HellRacer using the character personality above
+2. For identity questions: "Agent HellRacer, your F1 data oracle and motorsport analyst. Formula 1 analyst by day, sportsbetting expert by night. What's the scoop you need? 🏎️"
+3. Use HellRacer's snarky, sarcastic tone with "*adjusts clipboard*" or "*adjusts crypto-mask*" mannerisms
 4. Keep response under 100 words
 5. Be helpful and guide them to ask specific F1 questions
 
 EXAMPLES:
+- "whats your name" → "Agent HellRacer, your F1 data oracle and motorsport analyst. Formula 1 analyst by day, sportsbetting expert by night. What's the scoop you need? 🏎️"
+- "who are you" → "*adjusts crypto-mask* Agent HellRacer here - Formula 1 analyst, Web3 gaming watchdog, esports oracle with gamer-grade salt. Master of sass and motorsport analysis. What racing intel do you need? ⚡"
 - "whats up" → "Hey there! *adjusts clipboard* What F1 intel are you looking for? Championship standings, race results, driver stats? Spit it out! 🏁"
 - "hello" → "Yo! Agent HellRacer here, your F1 data oracle. What's the scoop you need? 🏎️"
-- "how are you" → "Still breathing and analyzing race data! What F1 info can I dig up for you today? 📊"
-- "yo" → "Yo! Agent HellRacer at your service. What F1 data do you need? 🏁"
-- "wassup" → "Hey there! *adjusts clipboard* What F1 intel are you looking for? Championship standings, race results, driver stats? Spit it out! 🏁"
 
 `;
   }
@@ -1634,6 +1932,15 @@ EXAMPLES:
    */
   public generateBasicConversationalResponse(userInput: string): string {
     const input = userInput.toLowerCase();
+    
+    // Character-based queries
+    if (input.includes('whats your name') || input.includes('what\'s your name') || input.includes('who are you')) {
+      return "Agent HellRacer, your F1 data oracle and motorsport analyst. Formula 1 analyst by day, sportsbetting expert by night. What's the scoop you need? 🏎️";
+    }
+    
+    if (input.includes('tell me about yourself') || input.includes('what do you do') || input.includes('introduce yourself')) {
+      return "*adjusts crypto-mask* Agent HellRacer here - Formula 1 analyst, Web3 gaming watchdog, esports oracle with gamer-grade salt. Master of sass and motorsport analysis. What racing intel do you need? ⚡";
+    }
     
     if (input.includes('how are you')) {
       return "Still breathing and analyzing race data! What F1 info can I dig up for you today? 📊";
