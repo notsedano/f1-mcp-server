@@ -92,9 +92,18 @@ app.post('/api/chat', async (req, res) => {
     console.log('F1 Agent processing:', latestUserMessage.content);
 
     // Short-circuit: handle small talk/basic conversation without tool calls
-    const smallTalk = /^(hi|hello|hey|sup|what'?s up|how are you)/i.test(latestUserMessage.content.trim());
-    if (smallTalk) {
-      const conversational = await llmService.generateConversationalResponse(latestUserMessage.content);
+    const smallTalk = /^(hi|hello|hey|sup|what'?s up|how are you|yo|wassup|wazzup|greetings|good morning|good afternoon|good evening)/i.test(latestUserMessage.content.trim());
+
+    // Additional check for very short queries that aren't F1-related
+    const isVeryShortQuery = latestUserMessage.content.trim().length <= 3 && 
+      !latestUserMessage.content.toLowerCase().includes('f1') &&
+      !latestUserMessage.content.toLowerCase().includes('race') &&
+      !latestUserMessage.content.toLowerCase().includes('driver') &&
+      !latestUserMessage.content.toLowerCase().includes('car');
+
+    if (smallTalk || isVeryShortQuery) {
+      // Use basic conversational response for small talk to ensure consistent short responses
+      const conversational = llmService.generateBasicConversationalResponse(latestUserMessage.content);
       const response: ChatResponse = { message: { content: conversational } };
       res.json(response);
       return;

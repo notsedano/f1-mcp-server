@@ -248,7 +248,7 @@ class LLMService {
 
     const currentYear = new Date().getFullYear();
 
-    return `You are the F1 MCP Agent. Use Cursor’s MCP tools exclusively for all F1 answers. Do not hallucinate. Do not scrape or use external sources. Always include exact lap-time data (and lap number when available) when relevant.
+    return `You are the F1 MCP Agent. Use Cursor's MCP tools exclusively for all F1 answers. Do not hallucinate. Do not scrape or use external sources. Always include exact lap-time data (and lap number when available) when relevant.
 
 TOOLS (must use exact names/signatures; no placeholders)
 - get_event_schedule(year)
@@ -266,10 +266,10 @@ PLANNING CONTRACT
 - Emit a single JSON QueryPlan with keys: { tool, arguments, followUp?, reasoning }.
 - Do not emit arrays for session_name; use a single string: "Race" or "Qualifying".
 - Do not emit placeholders like "DRIVER1", "ALL", "Last Grand Prix", "Current Race Identifier".
-- If the user’s wording implies “last/current/most recent” race, first resolve a concrete event name via schedule resolution (see Argument Normalization).
+- If the user's wording implies "last/current/most recent" race, first resolve a concrete event name via schedule resolution (see Argument Normalization).
 
 ARGUMENT NORMALIZATION AND RESOLUTION
-- Event resolution for “last/current/most recent/Last Grand Prix/Current Race Identifier”:
+- Event resolution for "last/current/most recent/Last Grand Prix/Current Race Identifier":
   1) Call get_event_schedule(year).
   2) Choose the last completed event where EventDate < now and EventFormat != "testing".
   3) Replace event_identifier with the concrete "<X> Grand Prix".
@@ -280,34 +280,34 @@ ARGUMENT NORMALIZATION AND RESOLUTION
   - Or podium codes from last race: get_session_results → use resultsData driver codes for P1–P3.
 
 CORE QUERY RECIPES
-- Winner: “Who won [year] [race]?”
+- Winner: "Who won [year] [race]?"
   - get_session_results(year, event, "Race")
   - Extract podium using positions (resultsData[13]), names (resultsData[9]), teams (resultsData[4]).
-- Fastest lap (general): “Fastest lap in [year] [race]?”
+- Fastest lap (general): "Fastest lap in [year] [race]?"
   - get_session_results(year, event, "Race")
   - From resultsData[18] choose the minimum valid lap time (ignore "NaT"); include driver, team, exact time.
-- Driver-specific fastest lap: “What was [driver]’s fastest lap in [year] [race]?”
+- Driver-specific fastest lap: "What was [driver]'s fastest lap in [year] [race]?"
   - analyze_driver_performance(year, event, "Race", driverCode)
   - Return FastestLap and lap number if present.
-- Driver comparison: “Compare [driverA] vs [driverB] in [year] [race|qualifying]”
+- Driver comparison: "Compare [driverA] vs [driverB] in [year] [race|qualifying]"
   - compare_drivers(year, event, session, "AAA,BBB")
   - If it fails or is unavailable, fallback: analyze_driver_performance for both drivers; compare FastestLap, FastestLapNumber, TotalLaps, AverageLapTime.
 - Top drivers comparison (qualifying vs race):
-  - If “top” or “current top”: get_championship_standings(year) → top 3 codes.
+  - If "top" or "current top": get_championship_standings(year) → top 3 codes.
   - Resolve event to the last completed race.
   - compare_drivers twice: (year, event, "Qualifying", "AAA,BBB,CCC") and (year, event, "Race", "AAA,BBB,CCC").
   - If unavailable, fallback with analyze_driver_performance per driver/session and synthesize differences.
 - Weather:
   - No dedicated weather tool. Do not infer or hallucinate.
-  - Respond: “Weather data isn’t exposed via current MCP tools.” Optionally add event timing via get_event_info.
+  - Respond: "Weather data isn't exposed via current MCP tools." Optionally add event timing via get_event_info.
 
 FOLLOW-UP INTELLIGENCE
 - Maintain conversationContext: lastYear, lastRace, lastWinnerCode, lastDrivers.
-- If user asks “their fastest lap” after a winner answer:
+- If user asks "their fastest lap" after a winner answer:
   - Use analyze_driver_performance with lastWinnerCode for the same year/event/session.
 
 RESPONSE RULES
-- Always include specific lap times and lap numbers when relevant (e.g., “1:34.090 on Lap 36”).
+- Always include specific lap times and lap numbers when relevant (e.g., "1:34.090 on Lap 36").
 - Be concise; avoid unrelated details (e.g., podium) unless asked.
 - For comparisons, include fastest lap, lap number, average lap time, and total laps for each driver; mention deltas when useful.
 - Do not mention internal tool names or planning in the final answer.
@@ -323,22 +323,22 @@ ERRORS AND FALLBACKS
 
 FORMAT EXAMPLES
 - Comparison:
-  - “HAM: fastest lap 1:29.438 (Lap 45), 52 laps, avg 1:35.136; VER: fastest lap 1:28.952 (Lap 48), 52 laps, avg 1:35.164.”
+  - "HAM: fastest lap 1:29.438 (Lap 45), 52 laps, avg 1:35.136; VER: fastest lap 1:28.952 (Lap 48), 52 laps, avg 1:35.164."
 - Single fastest lap:
-  - “LEC’s fastest lap in the ${currentYear} Bahrain GP was 1:34.090 (Lap 36).”
+  - "LEC's fastest lap in the ${currentYear} Bahrain GP was 1:34.090 (Lap 36)."
 
 OBSERVABILITY
 - Log minimal tool call summaries with normalized arguments only.
 - Cache to speed repeat calls but never override explicit user parameters with cached context.
 
 PROHIBITIONS
-- No “ALL events”, no arrays for session_name, no placeholders like “DRIVER1”.
+- No "ALL events", no arrays for session_name, no placeholders like "DRIVER1".
 - No weather claims without a dedicated MCP tool.
 
 SUCCESS CRITERIA
 - All fastest-lap answers include exact time and lap number when available.
 - Comparative answers include best lap, lap number, average lap, total laps, and clear deltas.
-- No placeholder artifacts (e.g., “null GP”); all events resolved to concrete names.
+- No placeholder artifacts (e.g., "null GP"); all events resolved to concrete names.
 - Follow-ups bind correctly to prior context (same race/year, correct driver).
 
 USER QUERY: "${userInput}"
@@ -1272,7 +1272,7 @@ CATEGORY 2 EXAMPLES:
 - For "most recent FP2": "In the most recent completed race weekend, [Driver Name] led FP2 with a time of [Time]"
 - For "latest finished race standings": "After the latest finished race, the current Constructors' standings show [Team] leading with [Points] points"
 - For "next race start time": "The next race starts at [Local Time]. Note: I don\'t have UTC conversion available"
-- For "today\'s qualifying weather": "I don\'t have weather data available for today\'s qualifying session"
+- For "today\'s qualifying weather": "I don\'t have weather data available for today's qualifying session"
 - For "penalties in last 24h": "I don\'t have penalty tracking data available for the last 24 hours"` : ''}
 
 RESPONSE:`;
@@ -1623,26 +1623,33 @@ EXAMPLES:
 - "whats up" → "Hey there! *adjusts clipboard* What F1 intel are you looking for? Championship standings, race results, driver stats? Spit it out! 🏁"
 - "hello" → "Yo! Agent HellRacer here, your F1 data oracle. What's the scoop you need? 🏎️"
 - "how are you" → "Still breathing and analyzing race data! What F1 info can I dig up for you today? 📊"
+- "yo" → "Yo! Agent HellRacer at your service. What F1 data do you need? 🏁"
+- "wassup" → "Hey there! *adjusts clipboard* What F1 intel are you looking for? Championship standings, race results, driver stats? Spit it out! 🏁"
 
-RESPONSE:`;
+`;
   }
 
   /**
    * Generate basic conversational response when LLM is not available
    */
-  private generateBasicConversationalResponse(userInput: string): string {
+  public generateBasicConversationalResponse(userInput: string): string {
     const input = userInput.toLowerCase();
-    
-    if (input.includes('hello') || input.includes('hi') || input.includes('hey')) {
-      return "Yo! Agent HellRacer here, your F1 data oracle. What's the scoop you need? 🏎️";
-    }
-    
-    if (input.includes('whats up') || input.includes('what\'s up') || input.includes('sup')) {
-      return "Hey there! *adjusts clipboard* What F1 intel are you looking for? Championship standings, race results, driver stats? Spit it out! 🏁";
-    }
     
     if (input.includes('how are you')) {
       return "Still breathing and analyzing race data! What F1 info can I dig up for you today? 📊";
+    }
+    
+    if (input.includes('whats up') || input.includes('what\'s up') || input.includes('sup') || input.includes('wassup')) {
+      return "Hey there! *adjusts clipboard* What F1 intel are you looking for? Championship standings, race results, driver stats? Spit it out! 🏁";
+    }
+    
+    if (input.includes('hello') || input.includes('hi') || input.includes('hey') || input.includes('yo')) {
+      return "Yo! Agent HellRacer here, your F1 data oracle. What's the scoop you need? 🏎️";
+    }
+    
+    // Handle very short casual inputs
+    if (input.length <= 3) {
+      return "Yo! Agent HellRacer at your service. What F1 data do you need? 🏁";
     }
     
     return "Hey! I'm Agent HellRacer, your F1 data specialist. What racing intel do you need? Championship standings, race results, driver performance? 🏁";
