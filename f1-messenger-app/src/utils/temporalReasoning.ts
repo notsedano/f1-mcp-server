@@ -2,11 +2,20 @@
 // Consolidates all temporal logic to eliminate duplication
 
 import type { QueryPlan } from '../services/llmService';
+import { temporalIntelligence } from '../services/temporalIntelligence';
 
 export class TemporalReasoning {
-  private static currentYear = new Date().getFullYear();
-  private static currentMonth = new Date().getMonth() + 1;
-  private static currentDay = new Date().getDate();
+  private static getCurrentYear(): number {
+    return temporalIntelligence.getTemporalContext().currentYear;
+  }
+  
+  private static getCurrentMonth(): number {
+    return temporalIntelligence.getTemporalContext().currentMonth;
+  }
+  
+  private static getCurrentDay(): number {
+    return temporalIntelligence.getTemporalContext().currentDay;
+  }
 
   /**
    * Detect Category 2 temporal patterns
@@ -43,11 +52,11 @@ export class TemporalReasoning {
         lowerInput.includes('who led fp2 in the most recent')) {
       return {
         tool: 'get_event_schedule',
-        arguments: { year: this.currentYear },
+        arguments: { year: this.getCurrentYear() },
         followUp: {
           tool: 'get_session_results',
           arguments: {
-            year: this.currentYear,
+            year: this.getCurrentYear(),
             event_identifier: 'MOST_RECENT_RACE',
             session_name: 'FP2'
           }
@@ -62,10 +71,10 @@ export class TemporalReasoning {
         lowerInput.includes('current constructors standings after the latest finished race')) {
       return {
         tool: 'get_event_schedule',
-        arguments: { year: this.currentYear },
+        arguments: { year: this.getCurrentYear() },
         followUp: {
           tool: 'get_championship_standings',
-          arguments: { year: this.currentYear }
+          arguments: { year: this.getCurrentYear() }
         },
         reasoning: 'User asks about standings after latest finished race. Need to get current standings.'
       };
@@ -75,7 +84,7 @@ export class TemporalReasoning {
     if (lowerInput.includes('next race start time') && lowerInput.includes('utc')) {
       return {
         tool: 'get_event_schedule',
-        arguments: { year: this.currentYear },
+        arguments: { year: this.getCurrentYear() },
         reasoning: 'User asks about next race start time in UTC. Need schedule to find next race and convert to UTC.'
       };
     }
@@ -84,11 +93,11 @@ export class TemporalReasoning {
     if (lowerInput.includes('today') && lowerInput.includes('qualifying')) {
       return {
         tool: 'get_event_schedule',
-        arguments: { year: this.currentYear },
+        arguments: { year: this.getCurrentYear() },
         followUp: {
           tool: 'get_session_results',
           arguments: {
-            year: this.currentYear,
+            year: this.getCurrentYear(),
             event_identifier: 'TODAYS_EVENT',
             session_name: 'Qualifying'
           }
@@ -101,7 +110,7 @@ export class TemporalReasoning {
     if (lowerInput.includes('penalties') && (lowerInput.includes('24h') || lowerInput.includes('last 24'))) {
       return {
         tool: 'get_event_schedule',
-        arguments: { year: this.currentYear },
+        arguments: { year: this.getCurrentYear() },
         reasoning: 'User asks about penalties in last 24h. Need to check recent events for penalty data.'
       };
     }
@@ -120,7 +129,7 @@ export class TemporalReasoning {
     if (lowerInput.includes('300 km/h') || lowerInput.includes('speed') && lowerInput.includes('first')) {
       return {
         tool: 'get_event_schedule',
-        arguments: { year: this.currentYear },
+        arguments: { year: this.getCurrentYear() },
         reasoning: 'User asks about first race to exceed 300 km/h. Need historical speed analysis (not available).'
       };
     }
@@ -128,7 +137,7 @@ export class TemporalReasoning {
     // H1: "Who finished 4th in the 1950 Monaco Grand Prix?"
     if (lowerInput.includes('finished 4th') || lowerInput.includes('position') && /\d{4}/.test(input)) {
       const yearMatch = input.match(/(19|20)\d{2}/);
-      const year = yearMatch ? parseInt(yearMatch[0]) : this.currentYear;
+      const year = yearMatch ? parseInt(yearMatch[0]) : this.getCurrentYear();
       return {
         tool: 'get_session_results',
         arguments: {
@@ -174,17 +183,16 @@ export class TemporalReasoning {
    * Get current temporal context
    */
   static getCurrentContext(): string {
-    return `Current Date: ${this.currentMonth}/${this.currentDay}/${this.currentYear}
-Current Year: ${this.currentYear}
-Current Month: ${this.currentMonth}`;
+    return `Current Date: ${this.getCurrentMonth()}/${this.getCurrentDay()}/${this.getCurrentYear()}
+Current Year: ${this.getCurrentYear()}
+Current Month: ${this.getCurrentMonth()}`;
   }
 
   /**
    * Update temporal context (call this periodically)
    */
   static updateContext(): void {
-    this.currentYear = new Date().getFullYear();
-    this.currentMonth = new Date().getMonth() + 1;
-    this.currentDay = new Date().getDate();
+    // No longer needed as we use temporalIntelligence service
+    // This method is kept for backward compatibility
   }
 } 

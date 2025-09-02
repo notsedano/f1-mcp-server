@@ -128,8 +128,12 @@ Format your response as a detailed, factual answer that directly addresses the q
   private setCachedResult(key: string, data: KnowledgeResponse): void {
     // Clean up old entries if cache is full
     if (GeminiKnowledgeService.knowledgeCache.size >= GeminiKnowledgeService.MAX_CACHE_SIZE) {
-      const oldestKey = GeminiKnowledgeService.knowledgeCache.keys().next().value;
-      GeminiKnowledgeService.knowledgeCache.delete(oldestKey);
+      const iterator = GeminiKnowledgeService.knowledgeCache.keys();
+      const result = iterator.next();
+      if (!result.done) {
+        const oldestKey: string = result.value as string;
+        GeminiKnowledgeService.knowledgeCache.delete(oldestKey);
+      }
     }
     
     GeminiKnowledgeService.knowledgeCache.set(key, {

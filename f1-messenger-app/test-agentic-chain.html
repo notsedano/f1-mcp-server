@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AgenticChain Test</title>
+</head>
+<body>
+    <h1>🧠 AgenticChain Service Test</h1>
+    <div id="status">Initializing...</div>
+    <button id="testBtn" onclick="testChain()">Test Agentic Chain</button>
+    <div id="output"></div>
+
+    <script type="module">
+        import { agenticChain } from './src/services/agenticChain.ts';
+        
+        const statusDiv = document.getElementById('status');
+        const outputDiv = document.getElementById('output');
+        
+        // Check initialization
+        setTimeout(() => {
+            const isAvailable = agenticChain.isAvailable();
+            statusDiv.innerHTML = `Service Available: ${isAvailable ? '✅ Yes' : '❌ No'}`;
+            
+            if (!isAvailable) {
+                statusDiv.innerHTML += '<br><br>🔍 Debug Info:<br>';
+                statusDiv.innerHTML += '- Check if VITE_GEMINI_API_KEY is set<br>';
+                statusDiv.innerHTML += '- Check browser console for errors<br>';
+                statusDiv.innerHTML += '- Verify all dependencies are loaded';
+            }
+        }, 1000);
+        
+        window.testChain = async function() {
+            if (!agenticChain.isAvailable()) {
+                outputDiv.innerHTML = '❌ Service not available';
+                return;
+            }
+            
+            try {
+                outputDiv.innerHTML = '🧠 Testing agentic chain...';
+                const chain = await agenticChain.executeChain('Who won the 2023 championship?', 'test-session');
+                outputDiv.innerHTML = `
+                    <h3>✅ Chain Executed Successfully!</h3>
+                    <pre>${JSON.stringify(chain, null, 2)}</pre>
+                `;
+            } catch (error) {
+                outputDiv.innerHTML = `
+                    <h3>❌ Chain Execution Failed</h3>
+                    <pre>${error.message}</pre>
+                    <br><br>
+                    <strong>Stack Trace:</strong><br>
+                    <pre>${error.stack}</pre>
+                `;
+            }
+        };
+    </script>
+</body>
+</html>

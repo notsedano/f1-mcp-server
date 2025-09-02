@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AgenticChain Browser Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .test-section { margin: 20px 0; padding: 15px; border: 1px solid #ccc; border-radius: 8px; }
+        .success { background-color: #d4edda; border-color: #c3e6cb; }
+        .error { background-color: #f8d7da; border-color: #f5c6cb; }
+        .info { background-color: #d1ecf1; border-color: #bee5eb; }
+        button { padding: 10px 20px; margin: 5px; border-radius: 5px; cursor: pointer; }
+        pre { background: #f8f9fa; padding: 10px; border-radius: 5px; overflow-x: auto; }
+    </style>
+</head>
+<body>
+    <h1>🧠 AgenticChain Service Browser Test</h1>
+    
+    <div class="test-section info">
+        <h3>🔍 Test Status</h3>
+        <div id="status">Initializing...</div>
+    </div>
+    
+    <div class="test-section">
+        <h3>🧪 Manual Tests</h3>
+        <button onclick="testAvailability()">Test Service Availability</button>
+        <button onclick="testChainExecution()">Test Chain Execution</button>
+        <button onclick="testThoughtProcess()">Test Thought Process Console</button>
+        <button onclick="clearOutput()">Clear Output</button>
+    </div>
+    
+    <div class="test-section">
+        <h3>📊 Test Results</h3>
+        <div id="output"></div>
+    </div>
+
+    <script type="module">
+        // Import the service
+        import { agenticChain } from './src/services/agenticChain.ts';
+        
+        const statusDiv = document.getElementById('status');
+        const outputDiv = document.getElementById('output');
+        
+        // Global functions for button clicks
+        window.testAvailability = function() {
+            const isAvailable = agenticChain.isAvailable();
+            const result = isAvailable ? 
+                '<span style="color: green;">✅ Service Available</span>' : 
+                '<span style="color: red;">❌ Service Not Available</span>';
+            
+            outputDiv.innerHTML = `
+                <h4>Service Availability Test</h4>
+                <p><strong>Result:</strong> ${result}</p>
+                <p><strong>Service Object:</strong></p>
+                <pre>${JSON.stringify({
+                    isInitialized: agenticChain.isInitialized,
+                    maxRecursionLevel: agenticChain.maxRecursionLevel,
+                    isAvailable: agenticChain.isAvailable()
+                }, null, 2)}</pre>
+            `;
+        };
+        
+        window.testChainExecution = async function() {
+            try {
+                outputDiv.innerHTML = '<h4>Chain Execution Test</h4><p>🧠 Executing chain...</p>';
+                
+                const chain = await agenticChain.executeChain(
+                    'Who won the 2023 championship?',
+                    'test-session'
+                );
+                
+                outputDiv.innerHTML = `
+                    <h4>Chain Execution Test</h4>
+                    <p><span style="color: green;">✅ Chain executed successfully!</span></p>
+                    <p><strong>Query:</strong> ${chain.query}</p>
+                    <p><strong>Steps:</strong> ${chain.steps.length}</p>
+                    <p><strong>Total Time:</strong> ${chain.totalProcessingTime}ms</p>
+                    <p><strong>Fallback Used:</strong> ${chain.fallbackUsed ? 'Yes' : 'No'}</p>
+                    <p><strong>Final Answer:</strong> ${chain.finalAnswer}</p>
+                    <p><strong>Full Chain Data:</strong></p>
+                    <pre>${JSON.stringify(chain, null, 2)}</pre>
+                `;
+            } catch (error) {
+                outputDiv.innerHTML = `
+                    <h4>Chain Execution Test</h4>
+                    <p><span style="color: red;">❌ Chain execution failed!</span></p>
+                    <p><strong>Error:</strong> ${error.message}</p>
+                    <p><strong>Stack Trace:</strong></p>
+                    <pre>${error.stack}</pre>
+                `;
+            }
+        };
+        
+        window.testThoughtProcess = function() {
+            outputDiv.innerHTML = `
+                <h4>Thought Process Console Test</h4>
+                <p>🧠 This test simulates what the thought process console would display.</p>
+                <p>✅ If the chain execution test above worked, the console should display:</p>
+                <ul>
+                    <li>Query analysis and metadata</li>
+                    <li>Decision path visualization</li>
+                    <li>Confidence trajectory</li>
+                    <li>Performance metrics</li>
+                    <li>ML-composable data</li>
+                </ul>
+                <p>🔧 To see the actual console, go to the main F1 app and click "🧠 Show Agent Thoughts"</p>
+            `;
+        };
+        
+        window.clearOutput = function() {
+            outputDiv.innerHTML = '';
+        };
+        
+        // Check initialization
+        setTimeout(() => {
+            const isAvailable = agenticChain.isAvailable();
+            statusDiv.innerHTML = `
+                <p><strong>Service Status:</strong> ${isAvailable ? '✅ Available' : '❌ Not Available'}</p>
+                <p><strong>Initialization:</strong> ${agenticChain.isInitialized ? '✅ Complete' : '❌ Failed'}</p>
+                <p><strong>Mode:</strong> ${agenticChain.model ? '🤖 LLM Mode' : '🧪 Fallback Mode'}</p>
+                <p><strong>Note:</strong> ${!agenticChain.model ? 'Running in fallback mode - no API key required for testing' : 'LLM mode active - requires Gemini API key'}</p>
+            `;
+        }, 1000);
+        
+        console.log('🧪 Browser test initialized');
+        console.log('AgenticChain service:', agenticChain);
+    </script>
+</body>
+</html>

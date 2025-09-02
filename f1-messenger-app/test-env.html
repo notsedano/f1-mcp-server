@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Environment Variables Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; background: #f5f5f5; }
+        .test-section { margin: 20px 0; padding: 20px; border: 1px solid #ddd; border-radius: 8px; background: white; }
+        .success { border-color: #28a745; background-color: #d4edda; }
+        .error { border-color: #dc3545; background-color: #f8d7da; }
+        .info { border-color: #17a2b8; background-color: #d1ecf1; }
+        pre { background: #f8f9fa; padding: 15px; border-radius: 5px; overflow-x: auto; border: 1px solid #e9ecef; }
+        .key-preview { font-family: monospace; background: #e9ecef; padding: 5px; border-radius: 3px; }
+    </style>
+</head>
+<body>
+    <h1>🔍 Environment Variables Test</h1>
+    
+    <div class="test-section info">
+        <h3>📋 Test Results</h3>
+        <div id="results">Testing environment variables...</div>
+    </div>
+    
+    <div class="test-section">
+        <h3>🧪 Manual Tests</h3>
+        <button onclick="testEnvVars()">Test Environment Variables</button>
+        <button onclick="testAgenticChain()">Test AgenticChain Service</button>
+        <button onclick="clearResults()">Clear Results</button>
+    </div>
+
+    <script type="module">
+        const resultsDiv = document.getElementById('results');
+        
+        // Test environment variables
+        window.testEnvVars = function() {
+            console.log('🧪 Testing environment variables...');
+            
+            const envVars = {
+                'VITE_GEMINI_API_KEY': import.meta.env.VITE_GEMINI_API_KEY,
+                'GEMINI_API_KEY': import.meta.env.GEMINI_API_KEY,
+                'REACT_APP_GEMINI_API_KEY': import.meta.env.REACT_APP_GEMINI_API_KEY,
+                'NODE_ENV': import.meta.env.NODE_ENV,
+                'MODE': import.meta.env.MODE,
+                'DEV': import.meta.env.DEV,
+                'PROD': import.meta.env.PROD
+            };
+            
+            let resultsHTML = '<h4>Environment Variables Status</h4>';
+            
+            for (const [key, value] of Object.entries(envVars)) {
+                if (value) {
+                    resultsHTML += `
+                        <div class="success">
+                            <strong>✅ ${key}:</strong> 
+                            <span class="key-preview">${value.substring(0, 10)}...</span>
+                            (Length: ${value.length})
+                        </div>
+                    `;
+                } else {
+                    resultsHTML += `
+                        <div class="error">
+                            <strong>❌ ${key}:</strong> Not found
+                        </div>
+                    `;
+                }
+            }
+            
+            // Check if we have the API key
+            const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+            if (apiKey) {
+                resultsHTML += `
+                    <div class="success">
+                        <h4>🎉 Success!</h4>
+                        <p>Gemini API key is loaded and ready to use.</p>
+                        <p><strong>Key starts with:</strong> <span class="key-preview">${apiKey.substring(0, 15)}...</span></p>
+                    </div>
+                `;
+            } else {
+                resultsHTML += `
+                    <div class="error">
+                        <h4>⚠️ Issue Detected</h4>
+                        <p>Gemini API key is not loading. This could be because:</p>
+                        <ul>
+                            <li>.env file is not in the correct location</li>
+                            <li>Vite needs to be restarted</li>
+                            <li>Environment variable name is incorrect</li>
+                            <li>File permissions issue</li>
+                        </ul>
+                        <p><strong>Solution:</strong> Restart your Vite dev server after creating/updating the .env file.</p>
+                    </div>
+                `;
+            }
+            
+            resultsDiv.innerHTML = resultsHTML;
+        };
+        
+        // Test AgenticChain service
+        window.testAgenticChain = async function() {
+            try {
+                resultsDiv.innerHTML = '<h4>🧠 Testing AgenticChain Service...</h4>';
+                
+                const { agenticChain } = await import('./src/services/agenticChain.ts');
+                
+                const isAvailable = agenticChain.isAvailable();
+                const isInitialized = agenticChain.isInitialized;
+                
+                let serviceHTML = `
+                    <h4>AgenticChain Service Status</h4>
+                    <div class="${isAvailable ? 'success' : 'error'}">
+                        <strong>Service Available:</strong> ${isAvailable ? '✅ Yes' : '❌ No'}
+                    </div>
+                    <div class="${isInitialized ? 'success' : 'error'}">
+                        <strong>Service Initialized:</strong> ${isInitialized ? '✅ Yes' : '❌ No'}
+                    </div>
+                `;
+                
+                if (isAvailable && isInitialized) {
+                    serviceHTML += `
+                        <div class="success">
+                            <h4>🧪 Testing Chain Execution...</h4>
+                            <p>Executing a test chain...</p>
+                        </div>
+                    `;
+                    
+                    try {
+                        const chain = await agenticChain.executeChain('Test query', 'test-session');
+                        serviceHTML += `
+                            <div class="success">
+                                <h4>✅ Chain Execution Successful!</h4>
+                                <p><strong>Query:</strong> ${chain.query}</p>
+                                <p><strong>Steps:</strong> ${chain.steps.length}</p>
+                                <p><strong>Fallback Used:</strong> ${chain.fallbackUsed ? 'Yes' : 'No'}</p>
+                                <p><strong>Mode:</strong> ${chain.fallbackUsed ? 'Fallback' : 'LLM'}</p>
+                            </div>
+                        `;
+                    } catch (error) {
+                        serviceHTML += `
+                            <div class="error">
+                                <h4>❌ Chain Execution Failed</h4>
+                                <p><strong>Error:</strong> ${error.message}</p>
+                            </div>
+                        `;
+                    }
+                }
+                
+                resultsDiv.innerHTML = serviceHTML;
+                
+            } catch (error) {
+                resultsDiv.innerHTML = `
+                    <div class="error">
+                        <h4>❌ Service Import Failed</h4>
+                        <p><strong>Error:</strong> ${error.message}</p>
+                        <pre>${error.stack}</pre>
+                    </div>
+                `;
+            }
+        };
+        
+        window.clearResults = function() {
+            resultsDiv.innerHTML = '';
+        };
+        
+        // Auto-test on load
+        setTimeout(() => {
+            testEnvVars();
+        }, 1000);
+    </script>
+</body>
+</html>

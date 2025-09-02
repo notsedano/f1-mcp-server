@@ -1,34 +1,17 @@
 # Cloudflare Tunnel Configuration for F1 Agent Server
 # This tunnel exposes localhost:11435 to the internet
 
-tunnel: f1-agent-tunnel
-credentials-file: .cloudflared/f1-agent-tunnel.json
+tunnel: f1-agent
+credentials-file: C:\\Users\\strodano\\.cloudflared\\8e6839f4-5a49-4a6a-bcb3-d9eeb93ae046.json
 
 ingress:
   # Route all traffic to the F1 Agent Server
-  - hostname: f1-agent.your-domain.com  # Replace with your actual domain
+  - hostname: f1-api.daredevil.gg
     service: http://localhost:11435
     originRequest:
       connectTimeout: 30s
-      readTimeout: 30s
-      writeTimeout: 30s
       noTLSVerify: false
       disableChunkedEncoding: false
-      keepAliveConnections: 0
-      keepAliveTimeout: 90s
-      httpHostHeader: ""
-      originServerName: ""
-      caPool: ""
-      noHappyEyeballs: false
-      proxyAddress: ""
-      proxyPort: 0
-      proxyType: ""
-      ipRules: []
-      http2Origin: false
-      access:
-        required: false
-        teamName: ""
-        auditSSHKey: false
 
   # Catch-all rule for unmatched requests
-  - service: http_status:404 
+  - service: http://localhost:11435

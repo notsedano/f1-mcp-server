@@ -2,12 +2,12 @@ import { useState, useEffect } from 'react';
 import ChatThread from './components/ChatThread';
 import InputArea from './components/InputArea';
 import ConnectionStatus from './components/ConnectionStatus';
+import { AgentThoughtProcess } from './components/AgentThoughtProcess';
 import type { Message } from './types';
 import { llmService } from './services/llmService';
+import { agenticChain } from './services/agenticChain';
 
 import './App.css';
-
-
 
 function App() {
   const [messages, setMessages] = useState<Message[]>([
@@ -21,6 +21,32 @@ function App() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [connectionState, setConnectionState] = useState<'connecting' | 'ready' | 'failed' | 'disconnected'>('disconnected');
   const [bridgeHealth, setBridgeHealth] = useState<any>(null);
+  
+  // Agent thought process state
+  const [showThoughtProcess, setShowThoughtProcess] = useState(false);
+  const [currentChain, setCurrentChain] = useState<any>(null);
+  
+  // Debug: Check agentic chain availability
+  useEffect(() => {
+    console.log('🔍 Checking AgenticChain availability...');
+    console.log('AgenticChain available:', agenticChain.isAvailable());
+    console.log('AgenticChain service:', agenticChain);
+    
+    // Debug environment variables
+    console.log('🔍 Environment Variables Debug:');
+    console.log('VITE_GEMINI_API_KEY:', (import.meta as any).env?.VITE_GEMINI_API_KEY ? 'Found' : 'Not found');
+    console.log('GEMINI_API_KEY:', (import.meta as any).env?.GEMINI_API_KEY ? 'Found' : 'Not found');
+    console.log('REACT_APP_GEMINI_API_KEY:', (import.meta as any).env?.REACT_APP_GEMINI_API_KEY ? 'Found' : 'Not found');
+    
+    // Check if the key is actually loaded
+    const apiKey = (import.meta as any).env?.VITE_GEMINI_API_KEY;
+    if (apiKey) {
+      console.log('🔑 API Key loaded successfully, length:', apiKey.length);
+      console.log('🔑 API Key preview:', apiKey.substring(0, 10) + '...');
+    } else {
+      console.log('❌ No API key found in environment variables');
+    }
+  }, []);
   
   // Prefer talking to the Agent server; fall back to bridge
   const AGENT_URL = (import.meta as any).env?.VITE_AGENT_URL || 'http://localhost:11435';
@@ -166,6 +192,24 @@ ${connectionState !== 'ready'
       // Fallback: local LLM planning + bridge tool call
       const queryPlan = await parseQuery(userInput);
       console.log('📋 Query plan (fallback to bridge):', JSON.stringify(queryPlan, null, 2));
+      
+      // Execute agentic chain to capture thought process
+      if (agenticChain.isAvailable()) {
+        try {
+          console.log('🧠 Executing agentic chain for thought process tracking...');
+          console.log('AgenticChain service state:', agenticChain);
+          const chain = await agenticChain.executeChain(userInput, Date.now().toString());
+          setCurrentChain(chain);
+          console.log('✅ Agentic chain executed:', chain);
+        } catch (chainError) {
+          console.warn('⚠️ Agentic chain execution failed:', chainError);
+          console.error('Chain error details:', chainError);
+          // Continue with normal processing even if chain fails
+        }
+      } else {
+        console.log('❌ AgenticChain not available, skipping thought process tracking');
+      }
+      
       const response = await fetch(`${BRIDGE_URL}/mcp/tool`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -319,9 +363,32 @@ ${connectionState !== 'ready'
     <div className="app">
       <div className="app-header">
         <h1>🏁 F1 Data Assistant - Intelligent</h1>
-        <ConnectionStatus 
-          state={connectionState} 
-        />
+        <div className="header-controls">
+          <button 
+            onClick={() => setShowThoughtProcess(!showThoughtProcess)}
+            className="thought-process-toggle"
+            title={showThoughtProcess ? 'Hide Agent Thoughts' : 'Show Agent Thoughts'}
+          >
+            {showThoughtProcess ? '🧠 Hide' : '🧠 Show'} Agent Thoughts
+          </button>
+          <button 
+            onClick={async () => {
+              console.log('🧪 Manual test of agentic chain...');
+              try {
+                const chain = await agenticChain.executeChain('Test query', 'test-session');
+                setCurrentChain(chain);
+                console.log('✅ Test chain executed:', chain);
+              } catch (error) {
+                console.error('❌ Test chain failed:', error);
+              }
+            }}
+            className="test-chain-btn"
+            title="Test Agentic Chain"
+          >
+            🧪 Test Chain
+          </button>
+          <ConnectionStatus state={connectionState} />
+        </div>
       </div>
       
       <div className="app-main">
@@ -335,6 +402,13 @@ ${connectionState !== 'ready'
           isProcessing={isProcessing}
         />
       </div>
+      
+      {/* Agent Thought Process Console */}
+      <AgentThoughtProcess
+        chain={currentChain}
+        isVisible={showThoughtProcess}
+        onToggle={() => setShowThoughtProcess(false)}
+      />
     </div>
   );
 }

@@ -5,6 +5,7 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 import { F1_TOOL_SCHEMAS } from './f1ToolSchemas';
 import { normalizeDriverIdentifier } from './driverMapping';
 import { TemporalReasoning } from '../utils/temporalReasoning';
+import { temporalIntelligence } from './temporalIntelligence';
 import { geminiKnowledgeService, type KnowledgeResponse } from './geminiKnowledgeService';
 
 export interface QueryPlan {
@@ -173,18 +174,26 @@ class LLMService {
       return { type: 'conversational', query: userInput, confidence: 0.9 };
     }
     
-    // NEW: Check for historical intent before MCP inadequacy
+    // Ambiguity check: if the query mixes F1 keywords with general-knowledge phrasing,
+    // use the LLM to decide routing based on intent.
+    const ambiguous = this.hasF1Keywords(userInput) && this.hasGeneralKnowledgePatterns(userInput);
+    if (ambiguous) {
+      console.log('🔍 Ambiguous query detected - invoking LLM intent detection');
+      return await this.detectQueryIntent(userInput);
+    }
+    
+    // Check for historical intent before MCP inadequacy
     const hasHistoricalIntent = this.detectHistoricalIntent(userInput);
     if (hasHistoricalIntent) {
-                console.log('🔍 Historical intent detected - routing to Gemini knowledge');
-          return { type: 'gemini_knowledge', query: userInput, confidence: 0.9 };
+      console.log('🔍 Historical intent detected - routing to Gemini knowledge');
+      return { type: 'gemini_knowledge', query: userInput, confidence: 0.9 };
     }
     
     // Check if our MCP tools are inadequate for this query
     const isMCPInadequate = this.isMCPInadequateForQuery(userInput);
     if (isMCPInadequate) {
-                console.log('🔍 MCP tools inadequate for query - routing to Gemini knowledge');
-          return { type: 'gemini_knowledge', query: userInput, confidence: 0.9 };
+      console.log('🔍 MCP tools inadequate for query - routing to Gemini knowledge');
+      return { type: 'gemini_knowledge', query: userInput, confidence: 0.9 };
     }
     
     // Check if it's a trivial/general knowledge question
@@ -198,8 +207,9 @@ class LLMService {
     // Check for prediction/sports betting patterns (future RAG pipeline)
     const isPrediction = this.isPredictionQuestion(userInput);
     if (isPrediction) {
-      console.log('🔮 Query classified as prediction - routing to RAG pipeline');
-      return { type: 'rag_pipeline', query: userInput, confidence: 0.7 };
+      console.log('🔮 Prediction/sportsbetting intent detected - returning placeholder message');
+      // Direct response path for prediction questions
+      return { type: 'conversational', query: "My prediction features will be coming soon! Ready to go to the MOON?", confidence: 1.0 };
     }
     
     // Default to F1 tools
@@ -208,14 +218,112 @@ class LLMService {
   }
 
   /**
+   * Check if query contains F1-specific keywords
+   */
+  private hasF1Keywords(userInput: string): boolean {
+    const input = userInput.toLowerCase();
+    const f1Keywords = [
+      'race', 'grand prix', 'gp', 'f1', 'formula 1', 'formula one',
+      'driver', 'team', 'constructor', 'championship', 'season',
+      'qualifying', 'practice', 'sprint', 'podium', 'points',
+      'monaco', 'silverstone', 'monza', 'spa', 'zandvoort', 'baku',
+      'verstappen', 'hamilton', 'leclerc', 'norris', 'russell',
+      'ferrari', 'mercedes', 'red bull', 'mclaren', 'aston martin',
+      'schedule', 'calendar', 'next race', 'upcoming', 'when is',
+      'start time', 'race time', 'qualifying time', 'practice time'
+    ];
+    return f1Keywords.some(keyword => input.includes(keyword));
+  }
+
+  /**
+   * Check if query has general-knowledge patterns (e.g., "who is", "what is")
+   */
+  private hasGeneralKnowledgePatterns(userInput: string): boolean {
+    const input = userInput.toLowerCase();
+    const generalStarters = [
+      'what is', 'how many', 'who is', 'where is', 'when was', 'why is',
+      'what are', 'how much', 'who was', 'where are', 'when did', 'why do'
+    ];
+    return generalStarters.some(starter => input.startsWith(starter));
+  }
+
+  /**
+   * LLM-based intent detection for ambiguous queries
+   */
+  private async detectQueryIntent(userInput: string): Promise<QueryRoute> {
+    if (!this.isInitialized) {
+      console.log('⚠️ LLM not initialized, defaulting to Gemini knowledge for ambiguous query');
+      return { type: 'gemini_knowledge', query: userInput, confidence: 0.7 };
+    }
+
+    const prompt = `Determine the intent of this query: "${userInput}"
+
+Choose the most appropriate category:
+1. F1_SPECIFIC - Query about current F1 data (race results, standings, lap times, performance data, etc.)
+2. GENERAL_KNOWLEDGE - Query about F1 history, driver biographies, general F1 facts, driver background
+3. HISTORICAL - Query about F1 history, records, past events, historical achievements
+4. CONVERSATIONAL - Small talk or character questions
+
+Examples:
+- "who is lando norris" → GENERAL_KNOWLEDGE (driver biography)
+- "what was lando's fastest lap in monaco" → F1_SPECIFIC (performance data)
+- "who won the 2023 championship" → F1_SPECIFIC (race results)
+- "who is michael schumacher" → GENERAL_KNOWLEDGE (driver biography)
+- "what is the history of ferrari" → HISTORICAL (team history)
+
+Respond with only the category name.`;
+
+    try {
+      const result = await this.model.generateContent(prompt);
+      const intent = (result.response.text() || '').trim().toLowerCase();
+      console.log('🧠 LLM Intent Detection Result:', intent);
+
+      switch (intent) {
+        case 'f1_specific':
+          return { type: 'f1_tools', query: userInput, confidence: 0.9 };
+        case 'general_knowledge':
+        case 'historical':
+          return { type: 'gemini_knowledge', query: userInput, confidence: 0.9 };
+        case 'conversational':
+          return { type: 'conversational', query: userInput, confidence: 0.9 };
+        default:
+          // Default to Gemini knowledge for ambiguous queries
+          return { type: 'gemini_knowledge', query: userInput, confidence: 0.8 };
+      }
+    } catch (error) {
+      console.error('❌ Error in LLM intent detection:', error);
+      // Fallback to Gemini knowledge for ambiguous queries
+      return { type: 'gemini_knowledge', query: userInput, confidence: 0.7 };
+    }
+  }
+
+  /**
    * NEW METHOD: Detect historical intent
    */
   private detectHistoricalIntent(userInput: string): boolean {
     const input = userInput.toLowerCase();
     
-    // Historical intent indicators
+    // F1-specific keywords that should NOT be classified as historical
+    const f1Keywords = [
+      'race', 'grand prix', 'gp', 'f1', 'formula 1', 'formula one',
+      'driver', 'team', 'constructor', 'championship', 'season',
+      'qualifying', 'practice', 'sprint', 'podium', 'points',
+      'monaco', 'silverstone', 'monza', 'spa', 'zandvoort', 'baku',
+      'verstappen', 'hamilton', 'leclerc', 'norris', 'russell',
+      'ferrari', 'mercedes', 'red bull', 'mclaren', 'aston martin',
+      'schedule', 'calendar', 'next race', 'upcoming', 'when is',
+      'start time', 'race time', 'qualifying time', 'practice time'
+    ];
+    
+    // If the query contains F1 keywords, it's NOT historical (it's current F1)
+    const hasF1Keywords = f1Keywords.some(keyword => input.includes(keyword));
+    if (hasF1Keywords) {
+      return false;
+    }
+    
+    // Historical intent indicators (only for non-F1 topics)
     const historicalIndicators = [
-      'first', 'original', 'inaugural', 'beginning', 'start', 'origin',
+      'first', 'original', 'inaugural', 'beginning', 'origin',
       'when did', 'where did', 'how did', 'since when', 'since the beginning',
       'since the start', 'since inception', 'since 1950', 'ever held',
       'ever raced', 'ever won', 'ever achieved', 'ever recorded'
@@ -252,14 +360,18 @@ class LLMService {
     
     const predictionPatterns = [
       /who will win/i,
+      /who's going to win/i,
+      /whos going to win/i,
+      /who do you think.*win/i,
+      /predict(ion|ions)?/i,
       /predict.*winner/i,
-      /odds.*win/i,
-      /bet.*on/i,
-      /forecast/i,
-      /prediction/i,
+      /odds/i,
+      /bet|wager|parlay|moneyline|spread|over\s*under/i,
+      /favorite|favourite.*(to win|for pole|for p\d+)/i,
       /likely.*win/i,
-      /chances.*win/i,
-      /probability.*win/i
+      /chances?.*win/i,
+      /probability.*win/i,
+      /who.*(take|on) pole/i
     ];
     
     return predictionPatterns.some(pattern => pattern.test(input));
@@ -271,7 +383,25 @@ class LLMService {
   private isTrivialQuestion(userInput: string): boolean {
     const input = userInput.toLowerCase();
     
-    // General knowledge patterns
+    // F1-specific keywords that should NOT be classified as trivial
+    const f1Keywords = [
+      'race', 'grand prix', 'gp', 'f1', 'formula 1', 'formula one',
+      'driver', 'team', 'constructor', 'championship', 'season',
+      'qualifying', 'practice', 'sprint', 'podium', 'points',
+      'monaco', 'silverstone', 'monza', 'spa', 'zandvoort', 'baku',
+      'verstappen', 'hamilton', 'leclerc', 'norris', 'russell',
+      'ferrari', 'mercedes', 'red bull', 'mclaren', 'aston martin',
+      'schedule', 'calendar', 'next race', 'upcoming', 'when is',
+      'start time', 'race time', 'qualifying time', 'practice time'
+    ];
+    
+    // If the query contains F1 keywords, it's NOT trivial
+    const hasF1Keywords = f1Keywords.some(keyword => input.includes(keyword));
+    if (hasF1Keywords) {
+      return false;
+    }
+    
+    // General knowledge patterns (only for non-F1 topics)
     const generalPatterns = [
       /what is the capital of/i,
       /how many.*are (there|in)/i,
@@ -293,7 +423,7 @@ class LLMService {
     
     const hasGeneralPatterns = generalPatterns.some(pattern => pattern.test(input));
     
-    // Check for common general knowledge question starters
+    // Check for common general knowledge question starters (but exclude F1 topics)
     const generalStarters = [
       'what is', 'how many', 'who is', 'where is', 'when was', 'why is',
       'what are', 'how much', 'who was', 'where are', 'when did', 'why do'
@@ -303,8 +433,8 @@ class LLMService {
       input.startsWith(starter.toLowerCase())
     );
     
-    // If it has general patterns or starters, it's likely general knowledge
-    return hasGeneralPatterns || hasGeneralStarter;
+    // If it has general patterns or starters AND no F1 keywords, it's likely general knowledge
+    return (hasGeneralPatterns || hasGeneralStarter) && !hasF1Keywords;
   }
 
   /**
@@ -361,42 +491,7 @@ class LLMService {
     return hasHistoricalContext || hasCrossSeasonalContext;
   }
 
-  /**
-   * Check if this is an F1 historical question that needs web search
-   */
-  private isF1HistoricalQuestion(userInput: string): boolean {
-    const input = userInput.toLowerCase();
-    
-    // F1 terms that could be historical
-    const f1Terms = [
-      'f1', 'formula one', 'grand prix', 'constructor', 'team', 'driver', 
-      'podium', 'championship', 'race', 'qualifying', 'practice', 'points',
-      'wins', 'win', 'poles', 'fastest lap', 'champion', 'title'
-    ];
-    
-    // Historical context patterns
-    const historicalPatterns = [
-      /in history/i, /all time/i, /ever/i, /most.*in history/i, 
-      /most.*history/i, /best.*in history/i, /best.*history/i,
-      /record.*in history/i, /record.*history/i, /historical/i,
-      /throughout history/i, /since.*beginning/i, /since.*start/i,
-      /who.*most.*history/i, /who.*best.*history/i, /who.*record.*history/i,
-      /first.*race/i, /first.*grand prix/i, /first.*f1/i, /first.*championship/i,
-      /first.*winner/i, /first.*champion/i, /first.*driver/i, /first.*team/i,
-      /first.*constructor/i, /first.*pole/i, /first.*fastest/i, /first.*podium/i,
-      /first.*points/i, /first.*victory/i, /first.*win/i, /first.*success/i,
-      /first.*achievement/i, /first.*milestone/i, /first.*record/i,
-      /original.*race/i, /original.*grand prix/i, /original.*f1/i,
-      /inaugural.*race/i, /inaugural.*grand prix/i, /inaugural.*f1/i,
-      /beginning.*f1/i, /start.*f1/i, /origin.*f1/i, /since.*1950/i,
-      /since.*inception/i, /since.*beginning/i, /since.*start/i
-    ];
-    
-    const hasF1Terms = f1Terms.some(term => input.includes(term));
-    const hasHistoricalContext = historicalPatterns.some(pattern => pattern.test(input));
-    
-    return hasF1Terms && hasHistoricalContext;
-  }
+  // Removed unused isF1HistoricalQuestion method to satisfy strict build
 
   /**
    * Enhanced query parsing with routing
@@ -407,6 +502,10 @@ class LLMService {
     
     switch (route.type) {
       case 'conversational':
+        // If routeQuery injected a direct string for placeholder responses, return it as-is
+        if (typeof route.query === 'string' && route.query.startsWith('My prediction features')) {
+          return route.query;
+        }
         return this.generateConversationalResponse(userInput);
         
       case 'gemini_knowledge':
@@ -414,7 +513,10 @@ class LLMService {
         console.log('🧠 Getting knowledge answer for query:', userInput);
         const knowledgeResponse = await geminiKnowledgeService.getKnowledgeAnswer(userInput);
         if (knowledgeResponse.status === 'success') {
-          return knowledgeResponse.answer;
+          // Sanitize disclaimers and cap to 255 characters
+          const cleaned = this.sanitizeKnowledgeAnswer(knowledgeResponse.answer);
+          const capped = await this.summarizeToLength(cleaned, 255);
+          return capped;
         }
         
         // If knowledge lookup fails, provide a fallback response
@@ -523,9 +625,16 @@ class LLMService {
       `${tool.name}: ${tool.description} (params: ${Object.keys(tool.parameters?.properties || {}).join(', ')})`
     ).join('\n');
 
-    const currentYear = new Date().getFullYear();
+    // Build both the temporal context object (for dynamic fields) and string (for prompt)
+    const temporalContextObj = temporalIntelligence.getTemporalContext();
+    const temporalContextString = temporalIntelligence.buildTemporalContextString();
+    
+    // Debug: Log the temporal context to verify it's correct
+    console.log('🔍 TEMPORAL CONTEXT FOR LLM:', temporalContextString);
 
     return `You are the F1 MCP Agent. Use Cursor's MCP tools exclusively for all F1 answers. Do not hallucinate. Do not scrape or use external sources. Always include exact lap-time data (and lap number when available) when relevant.
+
+${temporalContextString}
 
 TOOLS (must use exact names/signatures; no placeholders)
 - get_event_schedule(year)
@@ -602,7 +711,7 @@ FORMAT EXAMPLES
 - Comparison:
   - "HAM: fastest lap 1:29.438 (Lap 45), 52 laps, avg 1:35.136; VER: fastest lap 1:28.952 (Lap 48), 52 laps, avg 1:35.164."
 - Single fastest lap:
-  - "LEC's fastest lap in the ${currentYear} Bahrain GP was 1:34.090 (Lap 36)."
+  - "LEC's fastest lap in the ${temporalContextObj.currentYear} Bahrain GP was 1:34.090 (Lap 36)."
 
 OBSERVABILITY
 - Log minimal tool call summaries with normalized arguments only.
@@ -656,9 +765,10 @@ RESPONSE FORMAT:
       // Ensure we never return a null tool
       if (!parsed.tool || parsed.tool === 'null' || parsed.tool === null) {
         console.log('⚠️ LLM returned null tool, defaulting to championship standings');
+        const temporalContext = temporalIntelligence.getTemporalContext();
         return {
           tool: 'get_championship_standings',
-          arguments: { year: new Date().getFullYear() },
+          arguments: { year: temporalContext.currentYear },
           reasoning: 'LLM returned null tool, defaulting to current championship standings'
         };
       }
@@ -703,7 +813,12 @@ RESPONSE FORMAT:
 
     // Fallback to existing logic for "who won" queries
     const input = userInput.toLowerCase();
-    const currentYear = new Date().getFullYear();
+    const temporalContext = temporalIntelligence.getTemporalContext();
+    const currentYear = temporalContext.currentYear;
+    
+    // Debug: Log the current year being used
+    console.log('🔍 INTELLIGENT FALLBACK - Current Year:', currentYear);
+    console.log('🔍 INTELLIGENT FALLBACK - Temporal Context:', temporalContext);
 
     // Extract year from query first
     const yearMatch = input.match(/(?:19|20)\d{2}/);
@@ -774,7 +889,8 @@ RESPONSE FORMAT:
    */
   private fallbackParseQuery(userInput: string): QueryPlan {
     const input = userInput.toLowerCase();
-    const currentYear = new Date().getFullYear();
+    const temporalContext = temporalIntelligence.getTemporalContext();
+    const currentYear = temporalContext.currentYear;
     
     // Extract year
     const yearMatch = input.match(/(?:19|20)\d{2}/);
@@ -1133,7 +1249,8 @@ RESPONSE FORMAT:
     
     const { driver, team, lapTime } = fastestLapData;
     const raceName = this.extractRaceNameFromQuery(userInput);
-    const year = this.extractYearFromQuery(userInput) || new Date().getFullYear();
+    const temporalContext = temporalIntelligence.getTemporalContext();
+    const year = this.extractYearFromQuery(userInput) || temporalContext.currentYear;
     
     return `${driver} driving for ${team} set the fastest lap in the ${year} ${raceName} with a time of ${lapTime}.`;
   }
@@ -1220,7 +1337,8 @@ RESPONSE FORMAT:
     
     // Add year validation for session results to prevent hallucination
     if (toolName === 'get_session_results') {
-      const currentYear = new Date().getFullYear();
+      const temporalContext = temporalIntelligence.getTemporalContext();
+      const currentYear = temporalContext.currentYear;
       const queriedYear = toolResult.arguments?.year || currentYear;
       
       if (queriedYear !== currentYear) {
@@ -1464,10 +1582,11 @@ RESPONSE FORMAT:
    * Build prompt for response synthesis
    */
   private buildSynthesisPrompt(userInput: string, toolResult: any, toolName: string): string {
-    const currentYear = new Date().getFullYear();
-    const currentDate = new Date();
-    const currentMonth = currentDate.getMonth() + 1; // 1-12
-    const currentDay = currentDate.getDate();
+    const temporalContext = temporalIntelligence.getTemporalContext();
+    const currentYear = temporalContext.currentYear;
+    const currentMonth = temporalContext.currentMonth;
+    const currentDay = temporalContext.currentDay;
+    const nextYear = currentYear + 1;
     
     // Check if we have combined data (schedule + results)
     const hasCombinedData = toolResult.schedule && toolResult.results;
@@ -1514,7 +1633,7 @@ CURRENT CONTEXT:
 - Current Date: ${currentMonth}/${currentDay}/${currentYear}
 - Current Year: ${currentYear}
 - When users ask "when is the next race", find the NEXT upcoming race from today's date
-- If it's already July ${currentDay}, 2025, the Australian GP (March) has already happened
+- If it's already July ${currentDay}, ${currentYear}, the Australian GP (March) has already happened
 - Look for races that come AFTER today's date in the schedule
 - If no races are found after today, mention that the season has ended or is in offseason
 
@@ -1537,8 +1656,8 @@ ${hasError ? '11. CRITICAL: If there are errors in the data, DO NOT make up resu
 ${isCategory2Query ? '12. CATEGORY 2 TEMPORAL QUERIES: For "most recent", "latest finished", "next race start time", "today\'s", and "penalties" queries, provide accurate temporal information and admit limitations for missing data sources (weather, penalties, UTC times).' : ''}
 
 EXAMPLES:
-- If today is July 29, 2025 and user asks "next race": "The next race is the [Next Race Name] on [Date]"
-- If season has ended: "The 2025 season has concluded. The next season will begin in March 2026"
+- If today is July 29, ${currentYear} and user asks "next race": "The next race is the [Next Race Name] on [Date]"
+- If season has ended: "The ${currentYear} season has concluded. The next season will begin in March ${nextYear}"
 ${hasPodiumData ? '- For podium results: "The Belgian Grand Prix was won by [exact driver name from podium data] driving for [exact team name]. [2nd place driver] finished second for [team], and [3rd place driver] came third for [team]."' : ''}
 ${hasCombinedData && !hasPodiumData ? '- For last race results: "The Belgian Grand Prix was won by [Winner] with [Time]. [2nd place] finished second, [3rd place] third."' : ''}
 ${hasError ? '- For errors: "I apologize, but I encountered an error retrieving the race results. The data is currently unavailable. Please try again later."' : ''}
@@ -1603,7 +1722,8 @@ RESPONSE:`;
     
     // Add year validation for session results to prevent hallucination
     if (toolName === 'get_session_results') {
-      const currentYear = new Date().getFullYear();
+      const temporalContext = temporalIntelligence.getTemporalContext();
+      const currentYear = temporalContext.currentYear;
       const queriedYear = toolResult.arguments?.year || currentYear;
       
       if (queriedYear !== currentYear) {
@@ -1831,6 +1951,48 @@ RESPONSE:`;
   }
 
   /**
+   * Clear query cache (useful for debugging temporal issues)
+   */
+  clearCache(): void {
+    LLMService.queryCache.clear();
+    console.log('🧹 Query cache cleared manually');
+  }
+
+  /**
+   * Remove generic capability disclaimers or irrelevant lines from knowledge answers
+   */
+  private sanitizeKnowledgeAnswer(answer: string): string {
+    if (!answer) return '';
+    const lines = answer.split(/\r?\n/);
+    const filtered = lines.filter(l => !/i don't have information about/i.test(l));
+    return filtered.join('\n').trim();
+  }
+
+  /**
+   * Summarize text to a maximum character length (default 255)
+   */
+  private async summarizeToLength(text: string, maxChars = 255): Promise<string> {
+    if (!text) return '';
+    if (text.length <= maxChars) return text;
+    
+    // If LLM is unavailable, fallback to naive truncation with sentence boundary
+    if (!this.isInitialized) {
+      return (text.substring(0, maxChars - 1).trimEnd()) + '…';
+    }
+    
+    try {
+      const prompt = `Summarize the following answer into a single concise sentence under ${maxChars} characters, preserving key facts and names. Do not add disclaimers.\n\nTEXT:\n${text}`;
+      const result = await this.model.generateContent(prompt);
+      const summary = (result.response.text() || '').trim();
+      if (summary && summary.length <= maxChars) return summary;
+      // Fallback: hard cap
+      return (summary || text).substring(0, maxChars - 1).trimEnd() + '…';
+    } catch {
+      return (text.substring(0, maxChars - 1).trimEnd()) + '…';
+    }
+  }
+
+  /**
    * Re-initialize the LLM service (useful after environment variables are loaded)
    */
   reinitialize(): void {
@@ -1846,6 +2008,10 @@ RESPONSE:`;
     // Clear any cached state
     this.isInitialized = false;
     this.model = null;
+    
+    // Clear query cache to remove any old year values
+    LLMService.queryCache.clear();
+    console.log('🧹 Query cache cleared');
     
     // Try to initialize again
     this.initializeGemini();
