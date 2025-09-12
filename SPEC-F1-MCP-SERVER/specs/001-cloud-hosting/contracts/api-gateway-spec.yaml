@@ -1,0 +1,316 @@
+openapi: 3.0.3
+info:
+  title: F1 MCP Server API Gateway
+  description: API Gateway for F1 MCP Server cloud deployment
+  version: 1.0.0
+  contact:
+    name: F1 MCP Server Team
+    email: support@f1mcp.com
+
+servers:
+  - url: https://api.f1mcp.com/v1
+    description: Production server
+  - url: https://staging-api.f1mcp.com/v1
+    description: Staging server
+
+paths:
+  /health:
+    get:
+      summary: Health check endpoint
+      description: Returns the health status of the API gateway and backend services
+      operationId: getHealth
+      tags:
+        - Health
+      responses:
+        '200':
+          description: All services healthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+        '503':
+          description: One or more services unhealthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+
+  /chat:
+    post:
+      summary: Send message to AI companion
+      description: Send a message to the AI companion and receive a response
+      operationId: sendMessage
+      tags:
+        - Chat
+      security:
+        - ApiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChatRequest'
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChatResponse'
+        '400':
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '429':
+          description: Rate limit exceeded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /f1/schedule:
+    get:
+      summary: Get F1 event schedule
+      description: Retrieve the F1 event schedule for a specific year
+      operationId: getEventSchedule
+      tags:
+        - F1 Data
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - name: year
+          in: query
+          description: F1 season year
+          required: false
+          schema:
+            type: integer
+            minimum: 1950
+            maximum: 2030
+            default: 2024
+      responses:
+        '200':
+          description: Event schedule retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EventScheduleResponse'
+        '400':
+          description: Invalid year parameter
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /f1/drivers:
+    get:
+      summary: Get F1 driver information
+      description: Retrieve information about F1 drivers
+      operationId: getDriverInfo
+      tags:
+        - F1 Data
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - name: driver_id
+          in: query
+          description: Specific driver ID
+          required: false
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Driver information retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DriverInfoResponse'
+        '400':
+          description: Invalid driver ID
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+components:
+  securitySchemes:
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-Key
+      description: API key for authentication
+
+  schemas:
+    HealthResponse:
+      type: object
+      required:
+        - status
+        - timestamp
+        - services
+      properties:
+        status:
+          type: string
+          enum: [healthy, unhealthy, degraded]
+        timestamp:
+          type: string
+          format: date-time
+        services:
+          type: object
+          additionalProperties:
+            $ref: '#/components/schemas/ServiceHealth'
+
+    ServiceHealth:
+      type: object
+      required:
+        - name
+        - status
+        - response_time_ms
+      properties:
+        name:
+          type: string
+        status:
+          type: string
+          enum: [healthy, unhealthy, unknown]
+        response_time_ms:
+          type: integer
+          minimum: 0
+        last_check:
+          type: string
+          format: date-time
+
+    ChatRequest:
+      type: object
+      required:
+        - message
+      properties:
+        message:
+          type: string
+          minLength: 1
+          maxLength: 1000
+        context:
+          type: object
+          description: Additional context for the AI companion
+
+    ChatResponse:
+      type: object
+      required:
+        - response
+        - timestamp
+      properties:
+        response:
+          type: string
+        timestamp:
+          type: string
+          format: date-time
+        processing_time_ms:
+          type: integer
+          minimum: 0
+
+    EventScheduleResponse:
+      type: object
+      required:
+        - year
+        - events
+      properties:
+        year:
+          type: integer
+        events:
+          type: array
+          items:
+            $ref: '#/components/schemas/Event'
+
+    Event:
+      type: object
+      required:
+        - name
+        - date
+        - location
+      properties:
+        name:
+          type: string
+        date:
+          type: string
+          format: date
+        location:
+          type: string
+        sessions:
+          type: array
+          items:
+            $ref: '#/components/schemas/Session'
+
+    Session:
+      type: object
+      required:
+        - name
+        - datetime
+      properties:
+        name:
+          type: string
+        datetime:
+          type: string
+          format: date-time
+
+    DriverInfoResponse:
+      type: object
+      required:
+        - drivers
+      properties:
+        drivers:
+          type: array
+          items:
+            $ref: '#/components/schemas/Driver'
+
+    Driver:
+      type: object
+      required:
+        - id
+        - name
+        - team
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        team:
+          type: string
+        number:
+          type: integer
+        nationality:
+          type: string
+
+    ErrorResponse:
+      type: object
+      required:
+        - error
+        - message
+        - timestamp
+      properties:
+        error:
+          type: string
+        message:
+          type: string
+        timestamp:
+          type: string
+          format: date-time
+        details:
+          type: object
+          description: Additional error details

@@ -1,0 +1,125 @@
+# F1 MCP Server Cloud Deployment Environment Configuration
+# Copy this file to .env and fill in the actual values
+
+# =============================================================================
+# GENERAL SETTINGS
+# =============================================================================
+ENVIRONMENT=production
+DEBUG=false
+LOG_LEVEL=INFO
+
+# =============================================================================
+# MCP SERVER CONFIGURATION
+# =============================================================================
+MCP_SERVER_HOST=0.0.0.0
+MCP_SERVER_PORT=8000
+MCP_SERVER_WORKERS=4
+
+# FastF1 Configuration
+FASTF1_CACHE_DIR=/app/cache
+FASTF1_CACHE_ENABLED=true
+
+# =============================================================================
+# MESSENGER CLIENT CONFIGURATION
+# =============================================================================
+NODE_ENV=production
+PORT=3000
+MCP_SERVER_URL=http://mcp-server:8000
+
+# =============================================================================
+# MCP BRIDGE CONFIGURATION
+# =============================================================================
+BRIDGE_HOST=0.0.0.0
+BRIDGE_PORT=8001
+BRIDGE_WORKERS=2
+
+# =============================================================================
+# NGINX CONFIGURATION
+# =============================================================================
+NGINX_HOST=0.0.0.0
+NGINX_PORT_HTTP=80
+NGINX_PORT_HTTPS=443
+
+# SSL Configuration (if using HTTPS)
+SSL_CERT_PATH=/etc/nginx/ssl/cert.pem
+SSL_KEY_PATH=/etc/nginx/ssl/key.pem
+
+# =============================================================================
+# DATABASE CONFIGURATION (if needed for future RAG layer)
+# =============================================================================
+# DATABASE_URL=postgresql://user:password@db:5432/f1data
+# DATABASE_POOL_SIZE=10
+# DATABASE_MAX_OVERFLOW=20
+
+# =============================================================================
+# MONITORING AND LOGGING
+# =============================================================================
+# Logging
+LOG_FORMAT=json
+LOG_FILE_PATH=/var/log/f1-mcp-server.log
+
+# Metrics
+METRICS_ENABLED=true
+METRICS_PORT=9090
+
+# Health checks
+HEALTH_CHECK_INTERVAL=30
+HEALTH_CHECK_TIMEOUT=10
+
+# =============================================================================
+# SECURITY CONFIGURATION
+# =============================================================================
+# API Keys (generate secure random strings)
+API_SECRET_KEY=your-secret-key-here
+JWT_SECRET=your-jwt-secret-here
+
+# CORS Configuration
+CORS_ORIGINS=https://yourdomain.com,https://www.yourdomain.com
+CORS_METHODS=GET,POST,PUT,DELETE,OPTIONS
+CORS_HEADERS=Content-Type,Authorization
+
+# Rate Limiting
+RATE_LIMIT_REQUESTS_PER_MINUTE=100
+RATE_LIMIT_BURST_SIZE=200
+
+# =============================================================================
+# EXTERNAL SERVICES
+# =============================================================================
+# Gemini API (for AI features)
+GEMINI_API_KEY=your-gemini-api-key-here
+
+# External F1 Data APIs (fallback)
+ERGAST_API_URL=http://ergast.com/api/f1
+F1_OFFICIAL_API_URL=https://api.formula1.com
+
+# =============================================================================
+# CLOUD PROVIDER SPECIFIC
+# =============================================================================
+# Cloud provider (aws, gcp, azure, digitalocean, etc.)
+CLOUD_PROVIDER=digitalocean
+
+# Region
+REGION=nyc3
+
+# Instance configuration
+INSTANCE_TYPE=t3.medium
+INSTANCE_COUNT=1
+
+# Load balancer configuration
+LOAD_BALANCER_ENABLED=true
+LOAD_BALANCER_ALGORITHM=round_robin
+
+# =============================================================================
+# BACKUP AND DISASTER RECOVERY
+# =============================================================================
+BACKUP_ENABLED=true
+BACKUP_SCHEDULE=0 2 * * *
+BACKUP_RETENTION_DAYS=30
+BACKUP_STORAGE_PATH=/backups
+
+# =============================================================================
+# DEVELOPMENT OVERRIDES (set to false in production)
+# =============================================================================
+DEV_MODE=false
+MOCK_EXTERNAL_APIS=false
+SKIP_SSL_VERIFICATION=false

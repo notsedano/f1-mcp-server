@@ -1,0 +1,456 @@
+# Monitoring Configuration
+# Configuration file for the F1 MCP Server monitoring system
+
+# Server configuration
+server:
+  host: "0.0.0.0"
+  port: 3002
+  workers: 2
+  log_level: "INFO"
+  access_log: true
+
+# Health monitoring configuration
+health_monitoring:
+  enabled: true
+  check_interval: 30  # seconds
+  timeout: 10  # seconds
+  retry_attempts: 3
+  retry_delay: 5  # seconds
+  
+  # Services to monitor
+  services:
+    mcp-server:
+      url: "http://mcp-server:8000/health"
+      timeout: 5
+      critical: true
+      check_interval: 30
+      failure_threshold: 3
+      
+    messenger-client:
+      url: "http://messenger-client:3000/health"
+      timeout: 5
+      critical: true
+      check_interval: 30
+      failure_threshold: 3
+      
+    mcp-bridge:
+      url: "http://mcp-bridge:8001/health"
+      timeout: 5
+      critical: true
+      check_interval: 30
+      failure_threshold: 3
+      
+    api-gateway:
+      url: "http://api-gateway:8080/health"
+      timeout: 5
+      critical: true
+      check_interval: 30
+      failure_threshold: 3
+      
+    redis:
+      url: "redis://redis:6379"
+      timeout: 5
+      critical: false
+      check_interval: 60
+      failure_threshold: 5
+      
+    prometheus:
+      url: "http://prometheus:9090/-/healthy"
+      timeout: 5
+      critical: false
+      check_interval: 60
+      failure_threshold: 3
+      
+    grafana:
+      url: "http://grafana:3000/api/health"
+      timeout: 5
+      critical: false
+      check_interval: 60
+      failure_threshold: 3
+  
+  # System metrics monitoring
+  system_metrics:
+    enabled: true
+    check_interval: 60  # seconds
+    cpu_threshold: 80  # percentage
+    memory_threshold: 85  # percentage
+    disk_threshold: 90  # percentage
+    
+    # Network monitoring
+    network:
+      enabled: true
+      interface: "eth0"
+      bandwidth_threshold: 80  # percentage
+
+# Metrics collection configuration
+metrics_collection:
+  enabled: true
+  collection_interval: 30  # seconds
+  retention_days: 30
+  
+  # Prometheus integration
+  prometheus:
+    enabled: true
+    endpoint: "http://prometheus:9090"
+    scrape_interval: 30
+    push_gateway: "http://prometheus:9091"
+    
+  # Custom metrics
+  custom_metrics:
+    enabled: true
+    
+    # Application metrics
+    application:
+      request_count: true
+      request_duration: true
+      error_count: true
+      active_connections: true
+      
+    # System metrics
+    system:
+      cpu_usage: true
+      memory_usage: true
+      disk_usage: true
+      network_io: true
+      process_count: true
+      
+    # Business metrics
+    business:
+      api_calls_per_minute: true
+      cache_hit_ratio: true
+      database_connection_pool: true
+      queue_depth: true
+
+# Alerting configuration
+alerting:
+  enabled: true
+  
+  # Alert rules
+  rules:
+    # Service health alerts
+    service_down:
+      condition: "service_status == 'unhealthy'"
+      severity: "critical"
+      message: "Service {service_name} is down"
+      cooldown: 300  # seconds
+      
+    service_degraded:
+      condition: "service_status == 'degraded'"
+      severity: "high"
+      message: "Service {service_name} is degraded"
+      cooldown: 600  # seconds
+      
+    # System resource alerts
+    high_cpu:
+      condition: "cpu_usage > 80"
+      severity: "high"
+      message: "High CPU usage: {cpu_usage}%"
+      cooldown: 300  # seconds
+      
+    high_memory:
+      condition: "memory_usage > 85"
+      severity: "high"
+      message: "High memory usage: {memory_usage}%"
+      cooldown: 300  # seconds
+      
+    high_disk:
+      condition: "disk_usage > 90"
+      severity: "critical"
+      message: "High disk usage: {disk_usage}%"
+      cooldown: 300  # seconds
+      
+    # Application alerts
+    high_error_rate:
+      condition: "error_rate > 5"
+      severity: "high"
+      message: "High error rate: {error_rate}%"
+      cooldown: 300  # seconds
+      
+    slow_response:
+      condition: "avg_response_time > 5000"
+      severity: "medium"
+      message: "Slow response time: {avg_response_time}ms"
+      cooldown: 600  # seconds
+      
+    api_rate_limit:
+      condition: "rate_limit_violations > 100"
+      severity: "medium"
+      message: "High rate limit violations: {rate_limit_violations}"
+      cooldown: 300  # seconds
+  
+  # Notification channels
+  channels:
+    webhook:
+      enabled: true
+      url: "http://api-gateway:8080/api/v1/alerts/webhook"
+      timeout: 10
+      retry_attempts: 3
+      
+    email:
+      enabled: false
+      smtp_host: "smtp.gmail.com"
+      smtp_port: 587
+      smtp_user: "alerts@yourdomain.com"
+      smtp_password: "your-password"
+      from_email: "alerts@yourdomain.com"
+      to_emails:
+        - "admin@yourdomain.com"
+        - "ops@yourdomain.com"
+      
+    slack:
+      enabled: false
+      webhook_url: "https://hooks.slack.com/services/YOUR/SLACK/WEBHOOK"
+      channel: "#alerts"
+      username: "F1-MCP-Monitor"
+      
+    discord:
+      enabled: false
+      webhook_url: "https://discord.com/api/webhooks/YOUR/DISCORD/WEBHOOK"
+      username: "F1-MCP-Monitor"
+      
+    pagerduty:
+      enabled: false
+      integration_key: "your-pagerduty-integration-key"
+      api_url: "https://events.pagerduty.com/v2/enqueue"
+  
+  # Alert escalation
+  escalation:
+    enabled: true
+    levels:
+      - level: 1
+        delay: 300  # seconds
+        channels: ["webhook"]
+      - level: 2
+        delay: 600  # seconds
+        channels: ["webhook", "email"]
+      - level: 3
+        delay: 1800  # seconds
+        channels: ["webhook", "email", "slack"]
+
+# Dashboard configuration
+dashboard:
+  enabled: true
+  port: 3001
+  title: "F1 MCP Server Monitoring"
+  refresh_interval: 30  # seconds
+  max_history_points: 100
+  
+  # Dashboard widgets
+  widgets:
+    system_overview:
+      enabled: true
+      position: "top-left"
+      size: "large"
+      
+    services_health:
+      enabled: true
+      position: "top-right"
+      size: "large"
+      
+    metrics_chart:
+      enabled: true
+      position: "middle"
+      size: "full-width"
+      
+    active_alerts:
+      enabled: true
+      position: "bottom-left"
+      size: "medium"
+      
+    error_logs:
+      enabled: true
+      position: "bottom-right"
+      size: "medium"
+      
+    service_metrics:
+      enabled: true
+      position: "middle-right"
+      size: "medium"
+
+# Logging configuration
+logging:
+  level: "INFO"
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+  file: "/app/logs/monitoring.log"
+  max_size: 10485760  # 10MB
+  backup_count: 5
+  
+  # Log rotation
+  rotation:
+    enabled: true
+    when: "midnight"
+    interval: 1
+    backup_count: 7
+
+# Data storage configuration
+storage:
+  # Local storage
+  local:
+    enabled: true
+    data_dir: "/app/data"
+    max_size: 1073741824  # 1GB
+    
+  # Redis storage
+  redis:
+    enabled: true
+    host: "redis"
+    port: 6379
+    db: 1
+    password: null
+    max_connections: 10
+    
+  # External storage (optional)
+  external:
+    enabled: false
+    type: "s3"  # s3, gcs, azure
+    bucket: "f1-mcp-monitoring"
+    region: "us-east-1"
+    access_key: null
+    secret_key: null
+
+# Performance configuration
+performance:
+  # Async processing
+  async_workers: 4
+  max_concurrent_checks: 10
+  
+  # Caching
+  cache:
+    enabled: true
+    ttl: 300  # seconds
+    max_size: 1000
+    
+  # Database connections
+  database:
+    max_connections: 20
+    connection_timeout: 10
+    query_timeout: 30
+
+# Security configuration
+security:
+  # API authentication
+  api_auth:
+    enabled: true
+    api_key: "monitoring-api-key-2024"
+    header_name: "X-API-Key"
+    
+  # Rate limiting
+  rate_limiting:
+    enabled: true
+    requests_per_minute: 100
+    burst_limit: 20
+    
+  # IP restrictions
+  ip_restrictions:
+    enabled: false
+    allowed_ips:
+      - "127.0.0.1"
+      - "::1"
+      - "10.0.0.0/8"
+      - "172.16.0.0/12"
+      - "192.168.0.0/16"
+
+# Integration configuration
+integrations:
+  # Prometheus
+  prometheus:
+    enabled: true
+    scrape_endpoint: "/metrics"
+    push_metrics: true
+    push_interval: 30
+    
+  # Grafana
+  grafana:
+    enabled: true
+    datasource_name: "F1-MCP-Monitoring"
+    dashboard_provisioning: true
+    
+  # External monitoring services
+  external:
+    datadog:
+      enabled: false
+      api_key: null
+      app_key: null
+      site: "datadoghq.com"
+      
+    new_relic:
+      enabled: false
+      license_key: null
+      app_name: "F1-MCP-Server"
+      
+    sentry:
+      enabled: false
+      dsn: null
+      environment: "production"
+
+# Environment-specific overrides
+environments:
+  development:
+    log_level: "DEBUG"
+    health_monitoring.check_interval: 60
+    alerting.channels.webhook.enabled: true
+    alerting.channels.email.enabled: false
+    dashboard.refresh_interval: 10
+    
+  production:
+    log_level: "WARNING"
+    health_monitoring.check_interval: 30
+    alerting.channels.webhook.enabled: true
+    alerting.channels.email.enabled: true
+    alerting.channels.slack.enabled: true
+    dashboard.refresh_interval: 30
+    security.api_auth.enabled: true
+    
+  testing:
+    log_level: "ERROR"
+    health_monitoring.enabled: false
+    alerting.enabled: false
+    dashboard.enabled: false
+    metrics_collection.enabled: false
+
+# Feature flags
+features:
+  real_time_monitoring:
+    enabled: true
+    
+  historical_analysis:
+    enabled: true
+    retention_days: 30
+    
+  predictive_alerting:
+    enabled: false
+    ml_model_path: null
+    
+  automated_recovery:
+    enabled: false
+    recovery_scripts: []
+    
+  capacity_planning:
+    enabled: true
+    forecast_days: 7
+    
+  cost_optimization:
+    enabled: false
+    cost_threshold: 100  # USD per month
+
+# Maintenance configuration
+maintenance:
+  # Automated cleanup
+  cleanup:
+    enabled: true
+    schedule: "0 2 * * *"  # Daily at 2 AM
+    retention_days: 30
+    
+  # Health check maintenance
+  health_check_maintenance:
+    enabled: true
+    schedule: "0 3 * * 0"  # Weekly on Sunday at 3 AM
+    maintenance_window: 3600  # seconds
+    
+  # Database maintenance
+  database_maintenance:
+    enabled: true
+    schedule: "0 1 * * 0"  # Weekly on Sunday at 1 AM
+    vacuum: true
+    analyze: true
+    reindex: false

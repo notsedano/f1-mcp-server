@@ -21,6 +21,8 @@ import mcp.types as types
 from mcp.server.lowlevel import Server
 
 # Local application imports
+from ..common.logging_config import setup_logging
+from ..common.utils import rate_limit_decorator, safe_json_dumps
 from .f1_data import (
     analyze_driver_performance,
     compare_drivers,
@@ -32,42 +34,11 @@ from .f1_data import (
     get_telemetry,
 )
 
-# Environment variable for log level
-LOG_LEVEL = os.environ.get("F1_MCP_SERVER_LOG_LEVEL", "INFO").upper()
-
-# Configure logging
-logging.basicConfig(
-    level=getattr(logging, LOG_LEVEL),
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-)
-logger = logging.getLogger(__name__)
+# Configure logging using common utilities
+logger = setup_logging(__name__)
 
 # Rate limiting configuration
 MAX_REQUESTS_PER_MINUTE = 60
-request_timestamps: list[float] = []
-
-
-def check_rate_limit() -> bool:
-    """
-    Check if the current request exceeds rate limits.
-
-    Returns:
-        bool: True if within rate limit, False if exceeded
-    """
-    import time
-
-    current_time = time.time()
-    # Remove timestamps older than 60 seconds
-    global request_timestamps
-    request_timestamps = [ts for ts in request_timestamps if current_time - ts < 60]
-
-    # Check if we're over the limit
-    if len(request_timestamps) >= MAX_REQUESTS_PER_MINUTE:
-        return False
-
-    # Add current timestamp and allow request
-    request_timestamps.append(current_time)
-    return True
 
 
 def validate_port(ctx: click.Context, param: click.Parameter, value: int) -> int:
@@ -536,11 +507,13 @@ def main(port: int, transport: str, log_level: str) -> int:
         # Import SSE-specific modules only when needed
         try:
             import uvicorn
+            import psutil
             from mcp.server.sse import SseServerTransport
             from starlette.applications import Starlette
             from starlette.middleware import Middleware
             from starlette.middleware.cors import CORSMiddleware
             from starlette.routing import Mount, Route
+            from starlette.responses import JSONResponse, Response
         except ImportError:
             logger.error(
                 "SSE transport requires additional dependencies. "
@@ -575,9 +548,74 @@ def main(port: int, transport: str, log_level: str) -> int:
             )
         ]
 
+        # Health check endpoint
+        async def health_check(request):
+            """Health check endpoint for monitoring."""
+            import time
+            import psutil
+            
+            try:
+                # Basic health indicators
+                health_data = {
+                    "status": "healthy",
+                    "timestamp": time.time(),
+                    "uptime_seconds": time.time() - start_time if 'start_time' in globals() else 0,
+                    "service": "f1-mcp-server",
+                    "version": "1.0.0",
+                    "transport": "sse",
+                    "port": port,
+                    "memory_usage_percent": psutil.virtual_memory().percent,
+                    "cpu_usage_percent": psutil.cpu_percent(interval=1)
+                }
+                
+                return JSONResponse(content=health_data)
+            except Exception as e:
+                logger.error(f"Health check failed: {e}")
+                return JSONResponse(
+                    content={"status": "unhealthy", "error": str(e)},
+                    status_code=503
+                )
+
+        # Metrics endpoint for Prometheus
+        async def metrics(request):
+            """Prometheus metrics endpoint."""
+            try:
+                import time
+                
+                metrics_data = f"""# HELP f1_mcp_server_requests_total Total number of requests
+# TYPE f1_mcp_server_requests_total counter
+f1_mcp_server_requests_total {len(request_timestamps)}
+
+# HELP f1_mcp_server_rate_limit_violations_total Total number of rate limit violations
+# TYPE f1_mcp_server_rate_limit_violations_total counter
+f1_mcp_server_rate_limit_violations_total 0
+
+# HELP f1_mcp_server_uptime_seconds Server uptime in seconds
+# TYPE f1_mcp_server_uptime_seconds gauge
+f1_mcp_server_uptime_seconds {time.time() - start_time if 'start_time' in globals() else 0}
+
+# HELP f1_mcp_server_memory_usage_percent Memory usage percentage
+# TYPE f1_mcp_server_memory_usage_percent gauge
+f1_mcp_server_memory_usage_percent {psutil.virtual_memory().percent}
+
+# HELP f1_mcp_server_cpu_usage_percent CPU usage percentage
+# TYPE f1_mcp_server_cpu_usage_percent gauge
+f1_mcp_server_cpu_usage_percent {psutil.cpu_percent(interval=1)}
+"""
+                
+                return Response(content=metrics_data, media_type="text/plain")
+            except Exception as e:
+                logger.error(f"Metrics endpoint failed: {e}")
+                return Response(content="", status_code=503)
+
+        # Store start time for uptime calculation
+        start_time = time.time()
+
         starlette_app = Starlette(
             debug=(LOG_LEVEL == "DEBUG"),
             routes=[
+                Route("/health", endpoint=health_check),
+                Route("/metrics", endpoint=metrics),
                 Route("/sse", endpoint=handle_sse),
                 Mount("/messages/", app=sse.handle_post_message),
             ],

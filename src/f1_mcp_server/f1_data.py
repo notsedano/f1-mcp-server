@@ -11,10 +11,8 @@ compatible responses with appropriate error handling.
 """
 
 # Standard library imports
-import logging
 import os
 import tempfile
-from datetime import datetime
 from typing import Any
 
 # Third-party imports
@@ -22,8 +20,12 @@ import fastf1
 import numpy as np
 import pandas as pd
 
-# Configure logging
-logger = logging.getLogger(__name__)
+# Local application imports
+from ..common.logging_config import setup_logging
+from ..common.utils import json_serial, safe_json_dumps
+
+# Configure logging using common utilities
+logger = setup_logging(__name__)
 
 # Configure FastF1 cache with proper path security and isolation
 # Use a temporary directory to avoid permission issues and provide isolation
@@ -42,43 +44,7 @@ fastf1.Cache.enable_cache(CACHE_DIR)
 MAX_TELEMETRY_POINTS = 5000
 
 
-def json_serial(obj: Any) -> str | int | float | None:
-    """
-    Convert non-JSON serializable objects to strings.
-
-    Args:
-        obj: Object to be serialized to JSON
-
-    Returns:
-        JSON serializable representation of the object
-    """
-    if isinstance(obj, datetime | pd.Timestamp):
-        return obj.isoformat()
-    if isinstance(obj, np.integer):
-        return int(obj)
-    if isinstance(obj, np.floating):
-        return float(obj)
-    # Handle numpy arrays and pandas series
-    if isinstance(obj, (np.ndarray, pd.Series)):
-        return str(obj)
-    # Handle None first
-    if obj is None:
-        return None
-    
-    # Handle array-like objects before pd.isna
-    if hasattr(obj, '__len__') and len(obj) > 1:
-        # Array-like object, convert to string
-        return str(obj)
-    
-    # Use try-catch for pd.isna to handle arrays
-    try:
-        if pd.isna(obj):
-            return None
-    except (ValueError, TypeError):
-        # pd.isna failed on array-like object, convert to string
-        return str(obj)
-    
-    return str(obj)
+# json_serial function moved to common.utils
 
 
 def validate_year(year: Any) -> int:

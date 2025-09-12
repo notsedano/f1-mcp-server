@@ -1,0 +1,363 @@
+# API Gateway Configuration
+# Configuration file for the F1 MCP Server API Gateway
+
+# Server configuration
+server:
+  host: "0.0.0.0"
+  port: 8080
+  workers: 2
+  log_level: "INFO"
+  access_log: true
+  reload: false
+
+# CORS configuration
+cors:
+  enabled: true
+  allow_origins:
+    - "http://localhost:3000"
+    - "http://localhost:3001"
+    - "https://localhost:3000"
+    - "https://localhost:3001"
+  allow_credentials: true
+  allow_methods:
+    - "GET"
+    - "POST"
+    - "PUT"
+    - "DELETE"
+    - "OPTIONS"
+  allow_headers:
+    - "*"
+  max_age: 3600
+
+# Rate limiting configuration
+rate_limiting:
+  enabled: true
+  default_limit: 1000  # requests per window
+  default_window: 3600  # seconds
+  burst_limit: 100  # burst requests allowed
+  storage_backend: "redis"  # redis or memory
+  
+  # Per-endpoint limits
+  endpoints:
+    "/api/v1/health":
+      limit: 300
+      window: 60
+      burst: 50
+    "/api/v1/metrics":
+      limit: 100
+      window: 60
+      burst: 20
+    "/api/v1/mcp/*":
+      limit: 500
+      window: 60
+      burst: 100
+    "/api/v1/messenger/*":
+      limit: 200
+      window: 60
+      burst: 50
+    "/ws":
+      limit: 50
+      window: 60
+      burst: 10
+
+# Authentication configuration
+auth:
+  enabled: true
+  
+  # API Key authentication
+  api_keys:
+    enabled: true
+    header_name: "X-API-Key"
+    query_param: "api_key"
+    required_for:
+      - "/api/v1/mcp/*"
+      - "/api/v1/messenger/*"
+    
+    # Default API keys (should be changed in production)
+    default_keys:
+      - key: "f1-mcp-dev-key-2024"
+        name: "Development Key"
+        permissions:
+          - "read"
+          - "write"
+          - "admin"
+        expires_at: null
+        rate_limit_multiplier: 1.0
+      
+      - key: "f1-mcp-monitoring-key"
+        name: "Monitoring Key"
+        permissions:
+          - "read"
+          - "metrics"
+        expires_at: null
+        rate_limit_multiplier: 2.0
+  
+  # JWT authentication (optional)
+  jwt:
+    enabled: false
+    secret_key: "your-jwt-secret-key"
+    algorithm: "HS256"
+    access_token_expire_minutes: 30
+    refresh_token_expire_days: 7
+
+# Caching configuration
+caching:
+  enabled: true
+  backend: "redis"  # redis or memory
+  default_ttl: 300  # seconds
+  max_size: 1000  # max cached items
+  
+  # Cache configuration per endpoint
+  endpoints:
+    "/api/v1/health":
+      ttl: 30
+      enabled: true
+    "/api/v1/metrics":
+      ttl: 60
+      enabled: true
+    "/api/v1/mcp/schedule/*":
+      ttl: 3600
+      enabled: true
+    "/api/v1/mcp/standings/*":
+      ttl: 1800
+      enabled: true
+    "/api/v1/mcp/results/*":
+      ttl: 900
+      enabled: true
+
+# Request/Response configuration
+request_handling:
+  max_request_size: 10485760  # 10MB
+  timeout: 30  # seconds
+  retry_attempts: 3
+  retry_delay: 1  # seconds
+  
+  # Request validation
+  validation:
+    enabled: true
+    strict_mode: false
+    allow_unknown_fields: true
+  
+  # Response formatting
+  response:
+    include_timing: true
+    include_request_id: true
+    pretty_print: false
+
+# Logging configuration
+logging:
+  level: "INFO"
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+  file: "/app/logs/api-gateway.log"
+  max_size: 10485760  # 10MB
+  backup_count: 5
+  
+  # Request logging
+  request_logging:
+    enabled: true
+    log_body: false
+    log_headers: false
+    sensitive_headers:
+      - "authorization"
+      - "x-api-key"
+      - "cookie"
+
+# Security configuration
+security:
+  # Request size limits
+  max_request_size: 10485760  # 10MB
+  
+  # Header security
+  security_headers:
+    enabled: true
+    headers:
+      "X-Content-Type-Options": "nosniff"
+      "X-Frame-Options": "DENY"
+      "X-XSS-Protection": "1; mode=block"
+      "Strict-Transport-Security": "max-age=31536000; includeSubDomains"
+      "Content-Security-Policy": "default-src 'self'"
+  
+  # IP whitelisting (optional)
+  ip_whitelist:
+    enabled: false
+    allowed_ips:
+      - "127.0.0.1"
+      - "::1"
+      - "10.0.0.0/8"
+      - "172.16.0.0/12"
+      - "192.168.0.0/16"
+  
+  # Blocked IPs
+  ip_blacklist:
+    enabled: true
+    blocked_ips: []
+
+# Health check configuration
+health_check:
+  enabled: true
+  endpoint: "/health"
+  interval: 30  # seconds
+  timeout: 10  # seconds
+  failure_threshold: 3
+  
+  # Dependencies to check
+  dependencies:
+    redis:
+      enabled: true
+      timeout: 5
+    backend_services:
+      enabled: true
+      services:
+        - name: "mcp-server"
+          url: "http://mcp-server:8000/health"
+          timeout: 5
+        - name: "messenger-client"
+          url: "http://messenger-client:3000/health"
+          timeout: 5
+        - name: "mcp-bridge"
+          url: "http://mcp-bridge:8001/health"
+          timeout: 5
+
+# Metrics configuration
+metrics:
+  enabled: true
+  endpoint: "/metrics"
+  format: "prometheus"
+  
+  # Custom metrics
+  custom_metrics:
+    request_duration_histogram:
+      enabled: true
+      buckets: [0.1, 0.5, 1.0, 2.5, 5.0, 10.0]
+    
+    request_size_histogram:
+      enabled: true
+      buckets: [1024, 5120, 10240, 51200, 102400, 512000]
+    
+    response_size_histogram:
+      enabled: true
+      buckets: [1024, 5120, 10240, 51200, 102400, 512000]
+
+# Circuit breaker configuration
+circuit_breaker:
+  enabled: true
+  failure_threshold: 5
+  recovery_timeout: 60  # seconds
+  half_open_max_calls: 3
+  
+  # Per-service configuration
+  services:
+    mcp-server:
+      failure_threshold: 3
+      recovery_timeout: 30
+    messenger-client:
+      failure_threshold: 3
+      recovery_timeout: 30
+    mcp-bridge:
+      failure_threshold: 3
+      recovery_timeout: 30
+
+# Load balancing configuration
+load_balancing:
+  enabled: false  # Only if multiple instances of services
+  algorithm: "round_robin"  # round_robin, least_connections, weighted
+  health_check_interval: 30  # seconds
+  
+  # Service pools
+  services:
+    mcp-server:
+      instances:
+        - url: "http://mcp-server:8000"
+          weight: 1
+          healthy: true
+    messenger-client:
+      instances:
+        - url: "http://messenger-client:3000"
+          weight: 1
+          healthy: true
+    mcp-bridge:
+      instances:
+        - url: "http://mcp-bridge:8001"
+          weight: 1
+          healthy: true
+
+# WebSocket configuration
+websocket:
+  enabled: true
+  ping_interval: 30  # seconds
+  ping_timeout: 10  # seconds
+  max_connections: 100
+  message_size_limit: 1048576  # 1MB
+
+# Environment-specific overrides
+environments:
+  development:
+    log_level: "DEBUG"
+    cors.allow_origins:
+      - "http://localhost:3000"
+      - "http://localhost:3001"
+      - "http://localhost:8080"
+    rate_limiting.default_limit: 10000
+    auth.api_keys.required_for: []
+  
+  production:
+    log_level: "WARNING"
+    cors.allow_origins:
+      - "https://yourdomain.com"
+    rate_limiting.default_limit: 1000
+    security.security_headers.enabled: true
+    auth.api_keys.required_for:
+      - "/api/v1/mcp/*"
+      - "/api/v1/messenger/*"
+  
+  testing:
+    log_level: "ERROR"
+    rate_limiting.enabled: false
+    auth.enabled: false
+    caching.enabled: false
+
+# External service configuration
+external_services:
+  redis:
+    host: "redis"
+    port: 6379
+    db: 0
+    password: null
+    max_connections: 10
+    socket_timeout: 5
+    socket_connect_timeout: 5
+    
+  prometheus:
+    enabled: true
+    endpoint: "http://prometheus:9090"
+    scrape_interval: 30
+    
+  grafana:
+    enabled: true
+    endpoint: "http://grafana:3000"
+    api_key: null
+
+# Feature flags
+features:
+  api_documentation:
+    enabled: true
+    endpoint: "/docs"
+    title: "F1 MCP Server API"
+    description: "API Gateway for F1 MCP Server services"
+    version: "1.0.0"
+  
+  metrics_dashboard:
+    enabled: true
+    endpoint: "/dashboard"
+  
+  request_tracing:
+    enabled: true
+    trace_id_header: "X-Trace-Id"
+    include_in_response: true
+  
+  graceful_shutdown:
+    enabled: true
+    shutdown_timeout: 30  # seconds
+  
+  hot_reload:
+    enabled: false  # Only for development
